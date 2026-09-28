@@ -10,7 +10,8 @@ import { QueryKey } from "@/core/lib/consts";
 import { dateToLocale } from "@/core/lib/date";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { makeLink, WgerLink } from "@/core/lib/url";
 import { ExerciseDemoLink, SessionMetadataEditor, SessionTimer } from "@/components/Routines/widgets/WaveThree";
 
 const withDate = (log: WorkoutLog, date: Date) => Object.assign(Object.create(Object.getPrototypeOf(log)), log, { date: new Date(date.getTime()) }) as WorkoutLog;
@@ -39,7 +40,6 @@ const sessionName = (session: WorkoutSession) => {
     const sourceTitle = session.notes?.match(/^Original source title:\s*(.+)$/im)?.[1]?.trim();
     return sourceTitle || session.dayObj?.name || session.notes?.split(/\r?\n/, 1)[0]?.trim() || session.logs[0]?.exerciseObj?.getTranslation().name || "Workout";
 };
-const sessionUrl = (lang: string, id: string | null) => `/${lang}/routine/session/${id}`;
 
 const previousLogs = (log: WorkoutLog, sessions: WorkoutSession[]) => {
     const current = sessions.find(session => session.id === log.sessionId);
@@ -99,7 +99,7 @@ export const WorkoutsOverview = () => {
         <TextField fullWidth label="Search workout or exercise" value={search} onChange={event => setSearch(event.target.value)} sx={{ mb: 2 }} />
         <Stack spacing={1.5}>
             {sessions.slice(0, visible).map(session => <Card key={session.id} variant="outlined">
-                <CardActionArea component={Link} to={sessionUrl(lang, session.id)}>
+                <CardActionArea component={Link} to={makeLink(WgerLink.SESSION_DETAIL, lang, { id: session.id! })}>
                     <CardContent>
                         <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2 }}>
                             <Box>
@@ -124,6 +124,13 @@ export const SessionDetail = () => {
     const queryClient = useQueryClient();
     const session = sessionsQuery.data?.find(item => item.id === sessionId);
     const [adding, setAdding] = useState(false);
+    // Edit sets links land on #edit, which only exists once the sessions have loaded
+    const { hash } = useLocation();
+    const editRef = useRef<HTMLDivElement>(null);
+    const loaded = Boolean(session);
+    useEffect(() => {
+        if (loaded && hash === "#edit") editRef.current?.scrollIntoView();
+    }, [loaded, hash]);
     if (sessionsQuery.isLoading) return <CircularProgress />;
     if (!session) return <Typography color="error">Workout session not found.</Typography>;
     const grouped = new Map<number, WorkoutLog[]>();
@@ -142,7 +149,7 @@ export const SessionDetail = () => {
         <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
         <Button startIcon={<EditIcon />} href="#edit" variant="contained" sx={{ mb: 2 }}>Edit workout sets</Button>
         <Divider />
-        <Box id="edit">
+        <Box id="edit" ref={editRef}>
             {Array.from(grouped.values()).map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
                 <ExerciseDemoLink exercise={logs[0].exerciseObj!} />
                 <ExerciseLog
@@ -176,7 +183,7 @@ export const ExerciseProgression = ({ exerciseId }: { exerciseId: number }) => {
             <TimeSeriesChart data={logs} />
             <Stack divider={<Divider />}>
                 {[...logs].reverse().map(log => <Box key={log.id} sx={{ py: 1 }}>
-                    <Typography component={Link} to={sessionUrl(lang, log.sessionId)} sx={{ fontWeight: 600 }}>{dateToLocale(log.date)}</Typography>
+                    <Typography component={Link} to={makeLink(WgerLink.SESSION_DETAIL, lang, { id: log.sessionId! })} sx={{ fontWeight: 600 }}>{dateToLocale(log.date)}</Typography>
                     <SetSummary log={log} sessions={sessionsQuery.data ?? []} />
                 </Box>)}
             </Stack>
