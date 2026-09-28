@@ -16,7 +16,7 @@ export const EntryDateTimeField = (props: { initialDate: Date, onChange: (date: 
     const [t, i18n] = useTranslation();
     const [value, setValue] = React.useState<DateTime | null>(DateTime.fromJSDate(props.initialDate));
 
-    return <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+    return <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
         <DateTimePicker
             label={t('date')}
             value={value}

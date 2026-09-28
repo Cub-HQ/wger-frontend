@@ -77,7 +77,7 @@ export const MealForm = ({ meal, planId, closeFn }: MealFormProps) => {
                             {...formik.getFieldProps('name')}
                         />
 
-                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                             <TimePicker
                                 label={t('timeOfDay')}
                                 value={formik.values.time !== null ? DateTime.fromJSDate(formik.values.time) : null}

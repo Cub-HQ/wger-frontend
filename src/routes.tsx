@@ -16,6 +16,8 @@ import {
     WorkoutLogs,
     WorkoutStats
 } from "@/components/Routines";
+import { SessionDetail, WorkoutsOverview } from "@/components/Routines/widgets/WaveOne";
+import { QuickWorkout } from "@/components/Routines/widgets/WaveThree";
 import { TrophiesDetail } from "@/components/Trophies";
 import {
     About,
@@ -49,6 +51,9 @@ export const WgerRoutes = () => {
                     <Route index element={<RoutineOverview />} />
                     <Route path="overview" element={<RoutineOverview />} />
                     <Route path="calendar" element={<Calendar />} />
+                    <Route path="workouts" element={<WorkoutsOverview />} />
+                    <Route path="quick" element={<QuickWorkout />} />
+                    <Route path="session/:sessionId" element={<SessionDetail />} />
                     <Route path="add" element={<RoutineAdd />} />
 
                     <Route path=":routineId">

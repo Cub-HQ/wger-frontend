@@ -3,7 +3,10 @@ import { LoadingPlaceholder } from "@/core/ui/LoadingWidget/LoadingWidget";
 import { Exercise, getLanguageByShortName, NameAutocompleter, useLanguageQuery } from "@/components/Exercises";
 import { RIR_VALUES_SELECT } from "@/components/Routines/models/BaseConfig";
 import { LogEntryForm } from "@/components/Routines/models/WorkoutLog";
-import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay } from "@/components/Routines/queries";
+import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay, useSessionsQuery } from "@/components/Routines/queries";
+import { editSession } from "@/components/Routines/api/session";
+import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
+import { ExerciseDemoLink } from "@/components/Routines/widgets/WaveThree";
 import { REP_UNIT_REPETITIONS, SNACKBAR_AUTO_HIDE_DURATION } from "@/core/lib/consts";
 import { SwapHoriz } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
@@ -28,6 +31,7 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
     const { t, i18n } = useTranslation();
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const routineQuery = useRoutineDetailQuery(routineId);
+    const sessionsQuery = useSessionsQuery();
     // The session the form above works on, so the logs end up in the one the
     // user has in front of them. Without it the server would sort them into a
     // session by their time, which on a day with several of them is a guess
@@ -39,6 +43,7 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
 
     // Counter for the keys of the logs the user adds on top of the planned ones
     const extraLogKey = useRef(0);
+    const pendingSubstitution = useRef<string | null>(null);
 
     let language = undefined;
     if (languageQuery.isSuccess) {
@@ -99,8 +104,17 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
             ));
 
         await addLogsQuery.mutateAsync(data);
+        if (session && pendingSubstitution.current) {
+            await editSession(WorkoutSession.clone(session, { notes: `${session.notes ?? ""}
+${pendingSubstitution.current}`.trim() }));
+            pendingSubstitution.current = null;
+        }
         setSnackbarOpen(true);
     };
+
+    const previousFor = (exerciseId: number) => sessionsQuery.data?.flatMap(entry => entry.logs.map(log => ({ entry, log })))
+        .filter(item => item.log.exerciseId === exerciseId && item.entry.id !== session?.id && (!session || item.entry.datetimeStart < session.datetimeStart))
+        .sort((a, b) => b.entry.datetimeStart.getTime() - a.entry.datetimeStart.getTime())[0]?.log;
 
     const handleCallback = async (exercise: Exercise | null, formik: FormikProps<{
         logs: LogEntryForm[]
@@ -110,6 +124,10 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
             return;
         }
 
+        const reason = window.prompt("Why are you substituting this exercise?", "");
+        if (reason === null) return;
+        const originalName = formik.values.logs.find(log => exerciseIdToSwap === log.exercise!.id)?.exercise?.getTranslation(language).name;
+        pendingSubstitution.current = originalName ? `Substitution: ${exercise.getTranslation(language).name} for ${originalName}. Reason: ${reason}` : null;
         const updatedLogs = formik.values.logs.map((log) => {
             if (exerciseIdToSwap === log.exercise!.id) {
                 // Empty the rest of the values, this is a new exercise not in the routine
@@ -159,7 +177,9 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
                         repetitions: !hasNoIterationData && config.repetitions !== null ? config.repetitions : '',
                         repetitionsTarget: !hasNoIterationData && config.repetitions !== null ? config.repetitions : '',
                         weight: !hasNoIterationData && config.weight !== null ? config.weight : '',
-                        weightTarget: !hasNoIterationData && config.weight !== null ? config.weight : ''
+                        weightTarget: !hasNoIterationData && config.weight !== null ? config.weight : '',
+                        rest: '',
+                        restTarget: ''
                     });
                 }
             }
@@ -182,6 +202,7 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
                 <Form>
                     <FieldArray name={"logs"}>
                         {({ insert, remove }) => (<>
+                                <Alert severity="info">Added or removed sets affect this session only. Skipped rows are not saved as zeroes.</Alert>
 
                                 {formik.values.logs.map((log, index) => (
                                     <Grid container key={log.clientKey} spacing={1} sx={{ mt: 2 }}>
@@ -189,10 +210,11 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
                                         {/* Only show the exercise name the first time it appears */}
                                         {(index === 0 || (index > 0 && formik.values.logs[index - 1].exercise!.id !== formik.values.logs[index].exercise!.id)) && <>
                                             <Grid size={12}>
-                                                {exerciseIdToSwap !== formik.values.logs[index].exercise!.id &&
-                                                    <Typography variant="h6">
-                                                        {formik.values.logs[index].exercise?.getTranslation(language).name}
-                                                    </Typography>}
+                                                {exerciseIdToSwap !== formik.values.logs[index].exercise!.id && <>
+                                                    <Typography variant="h6">{formik.values.logs[index].exercise?.getTranslation(language).name}</Typography>
+                                                    <ExerciseDemoLink exercise={formik.values.logs[index].exercise!} />
+                                                    {previousFor(formik.values.logs[index].exercise!.id!) && <Typography color="text.secondary">Previous: {previousFor(formik.values.logs[index].exercise!.id!)?.repetitions ?? "—"} reps × {previousFor(formik.values.logs[index].exercise!.id!)?.weight ?? "—"} {previousFor(formik.values.logs[index].exercise!.id!)?.weightUnitObj?.name ?? ""}</Typography>}
+                                                </>}
 
                                                 {exerciseIdToSwap === formik.values.logs[index].exercise!.id &&
                                                     <NameAutocompleter
@@ -208,7 +230,16 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
                                                         clientKey: `extra-${extraLogKey.current++}`,
                                                         exercise: formik.values.logs[index].exercise,
                                                         repetitions: formik.values.logs[index].repetitions,
-                                                        weight: formik.values.logs[index].weight
+                                                        repetitionsTarget: formik.values.logs[index].repetitionsTarget ?? "",
+                                                        repetitionsUnit: formik.values.logs[index].repetitionsUnit,
+                                                        weight: formik.values.logs[index].weight,
+                                                        weightTarget: formik.values.logs[index].weightTarget ?? "",
+                                                        weightUnit: formik.values.logs[index].weightUnit,
+                                                        rir: formik.values.logs[index].rir,
+                                                        rirTarget: formik.values.logs[index].rirTarget ?? "",
+                                                        rest: formik.values.logs[index].rest ?? "",
+                                                        restTarget: formik.values.logs[index].restTarget ?? "",
+                                                        slotEntry: null
                                                     })}
                                                 >
                                                     <AddIcon />

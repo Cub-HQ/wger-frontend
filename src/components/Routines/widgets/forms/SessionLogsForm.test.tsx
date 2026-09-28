@@ -1,13 +1,22 @@
-import { render, screen } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from "@testing-library/user-event";
 import { useLanguageQuery } from "@/components/Exercises";
-import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay } from "@/components/Routines/queries";
+import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay, useSessionsQuery } from "@/components/Routines/queries";
 import { SessionLogsForm } from '@/components/Routines/widgets/forms/SessionLogsForm';
 import { DateTime } from "luxon";
 import { testLanguages } from "@/tests/exerciseTestdata";
 import { testWorkoutSession } from "@/tests/workoutLogsRoutinesTestData";
 import { testRoutine1 } from "@/tests/workoutRoutinesTestData";
+import { testQueryClient } from "@/tests/queryClient";
+import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import type { Mock } from 'vitest';
+
+// The exercise demo link under each exercise needs a router and a query client
+const render = (ui: React.ReactElement) => rtlRender(
+    <QueryClientProvider client={testQueryClient}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>
+);
 
 
 vi.mock("@/components/Exercises/queries");
@@ -19,6 +28,7 @@ describe('SessionLogsForm', () => {
     const mockAddLogsQuery = useAddRoutineLogsQuery as Mock;
     const mockRoutineDetailQuery = useRoutineDetailQuery as Mock;
     const mockUseSessionOfDay = useSessionOfDay as Mock;
+    const mockUseSessionsQuery = useSessionsQuery as Mock;
     const mockMutateAsync = vi.fn();
 
     beforeEach(() => {
@@ -42,6 +52,8 @@ describe('SessionLogsForm', () => {
             isLoading: false,
             isSuccess: true,
         });
+        // Feeds the "Previous: …" hint, none here
+        mockUseSessionsQuery.mockReturnValue({ isLoading: false, data: [] });
     });
 
 

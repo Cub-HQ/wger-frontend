@@ -37,10 +37,11 @@ import {
 import { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { generateChartColors } from "@/core/lib/colors";
 import { PAGINATION_OPTIONS } from "@/core/lib/consts";
-import { dateToLocale, luxonDateTimeToLocale } from "@/core/lib/date";
+import { dateToLocale } from "@/core/lib/date";
+import { filterProgressionChartData } from "@/components/Routines/widgets/progressionChartRange";
 
 
-export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logEntries: WorkoutLog[] | undefined }) => {
+export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logEntries: WorkoutLog[] | undefined, chartEntries?: WorkoutLog[], displayDate?: Date, displayDates?: Map<string, Date> }) => {
     const { t } = useTranslation();
     const logEntries = props.logEntries ?? [];
     const deleteLogQuery = useDeleteRoutineLogQuery(props.routineId);
@@ -48,7 +49,7 @@ export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logE
 
     const initialRows: GridRowsProp = logEntries.map((logEntry: WorkoutLog) => ({
         id: logEntry.id,
-        date: logEntry.date,
+        date: props.displayDates?.has(logEntry.id) ? new Date(props.displayDates.get(logEntry.id)!.getTime()) : props.displayDate ? new Date(props.displayDate.getTime()) : logEntry.date,
         repetitions: logEntry.repetitions,
         weight: logEntry.weight,
         rir: logEntry.rir,
@@ -90,11 +91,11 @@ export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logE
         }
     };
 
-    const processRowUpdate = (newRow: GridRowModel) => {
+    const processRowUpdate = (newRow: GridRowModel, oldRow: GridRowModel) => {
 
         const log = newRow.entry;
         if (log !== undefined) {
-            log.date = newRow.date;
+            if (newRow.date.getTime() !== oldRow.date.getTime()) log.date = newRow.date;
             log.repetitions = newRow.repetitions;
             log.weight = newRow.weight;
             log.rir = newRow.rir;
@@ -234,7 +235,7 @@ export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logE
 
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
-                <TimeSeriesChart data={logEntries} key={props.exercise.id} />
+                <TimeSeriesChart data={props.chartEntries ?? logEntries} key={props.exercise.id} />
             </Grid>
         </Grid>
     </>;
@@ -245,50 +246,50 @@ export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logE
  * This is mostly due to the time, which needs to be a number to be shown
  * in the scatter plot
  */
-const formatData = (data: WorkoutLog[]) =>
+const formatData = (data: WorkoutLog[], byReps = false) =>
     data.map((log) => {
         return {
             id: log.id,
-            value: log.weight,
+            value: byReps ? log.repetitions : log.weight,
             time: log.date.getTime(),
             entry: log,
         };
     });
 
-const ExerciseLogTooltip = ({ active, payload }: TooltipContentProps<ValueType, NameType>) => {
-    if (active) {
-        // TODO: translate rir
-        let rir = '';
-        if (payload?.[1].payload?.entry.rir) {
-            rir = `, ${payload?.[1].payload?.entry.rir} RiR`;
-        }
-
-        return <Card>
-            <CardContent>
-                <Typography variant="body1">
-                    {luxonDateTimeToLocale(DateTime.fromMillis(payload?.[0].value as number))}
-                </Typography>
-
-                <Typography variant="body2">
-                    {payload?.[1].payload?.entry.repetitions} × {payload?.[1].value}{payload?.[1].unit}{rir}
-                </Typography>
-            </CardContent>
-        </Card>;
+const exerciseLogTooltip = (sets: Map<number, [number, WorkoutLog][]>) => ({ active, payload }: TooltipContentProps<ValueType, NameType>) => {
+    const time = payload?.[0]?.payload?.time as number | undefined;
+    if (!active || time === undefined) {
+        return null;
     }
-    return null;
+    return <Card>
+        <CardContent>
+            <Typography variant="body1">{DateTime.fromMillis(time).toFormat('dd/MM/yy')}</Typography>
+            {(sets.get(time) ?? []).map(([set, log]) => <Typography variant="body2" key={log.id}>
+                Set {set}: {log.weight ? `${log.repetitions} × ${log.weight}kg` : `${log.repetitions} reps`}{log.rir ? `, ${log.rir} RiR` : ''}
+            </Typography>)}
+        </CardContent>
+    </Card>;
 };
 
 export const TimeSeriesChart = (props: { data: WorkoutLog[] }) => {
 
-    // Group by rep count
-    //
-    // We draw series based on the same reps, as otherwise the chart wouldn't
-    // make much sense
-    const result: Map<number, WorkoutLog[]> = props.data.reduce(function (r, a) {
-        r.set(a.repetitions, r.get(a.repetitions) || []);
-        r.get(a.repetitions)!.push(a);
-        return r;
-    }, new Map());
+    const chartData = filterProgressionChartData(props.data);
+
+    // A set keeps the same colour across workout dates so its progression is visible.
+    const counters = new Map<string, number>();
+    const result = new Map<number, WorkoutLog[]>();
+    chartData.forEach(log => {
+        const session = log.sessionId ?? log.date.toDateString();
+        const setNumber = (counters.get(session) ?? 0) + 1;
+        counters.set(session, setNumber);
+        result.set(setNumber, [...(result.get(setNumber) ?? []), log]);
+    });
+    // Every set of one workout shares that workout's date, so hovering one dot lists them all.
+    const sets = new Map<number, [number, WorkoutLog][]>();
+    result.forEach((logs, set) => logs.forEach(log => sets.set(log.date.getTime(), [...(sets.get(log.date.getTime()) ?? []), [set, log]])));
+    const ticks = [...sets.keys()].sort((a, b) => a - b);
+    // Bodyweight moves (e.g. superman) log reps only, so chart reps when no set carries weight.
+    const byReps = !chartData.some(log => log.weight !== null && log.weight !== 0);
 
     const colorGenerator = generateChartColors(result.size);
 
@@ -299,19 +300,22 @@ export const TimeSeriesChart = (props: { data: WorkoutLog[] }) => {
                     dataKey="time"
                     domain={["auto", "auto"]}
                     name="Time"
-                    tickFormatter={unixTime => luxonDateTimeToLocale(DateTime.fromMillis(unixTime))}
+                    ticks={ticks}
+                    interval={0}
+                    padding={{ left: 16, right: 16 }}
+                    tickFormatter={unixTime => DateTime.fromMillis(unixTime).toFormat('dd/MM/yy')}
                     type="number"
                 />
                 <YAxis
                     domain={["auto", "auto"]}
                     dataKey="value"
                     name="Value"
-                    unit="kg"
+                    unit={byReps ? " reps" : "kg"}
                 />
 
                 {Array.from(result).map(([key, value]) => {
                         const color = colorGenerator.next().value!;
-                        const formattedData = formatData(value);
+                        const formattedData = formatData(value, byReps);
 
                         return <Scatter
                             key={key}
@@ -320,12 +324,12 @@ export const TimeSeriesChart = (props: { data: WorkoutLog[] }) => {
                             line={{ stroke: color }}
                             lineType="joint"
                             lineJointType="monotoneX"
-                            name={key?.toString()}
+                            name={`Set ${key}`}
                         />;
                     }
                 )}
 
-                <Tooltip content={ExerciseLogTooltip} />
+                <Tooltip content={exerciseLogTooltip(sets)} />
                 <CartesianGrid strokeDasharray="3 3" />
                 <Legend />
             </ScatterChart>

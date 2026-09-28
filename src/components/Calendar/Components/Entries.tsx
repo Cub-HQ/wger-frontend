@@ -15,6 +15,11 @@ import {
 import React from 'react';
 import { useTranslation } from "react-i18next";
 import type { DayProps } from "./CalendarComponent";
+import { SetSummary } from "@/components/Routines/widgets/WaveOne";
+import { useSessionsQuery } from "@/components/Routines";
+import EditIcon from "@mui/icons-material/Edit";
+import { Button, Stack } from "@mui/material";
+import { makeLink, WgerLink } from "@/core/lib/url";
 
 interface LogProps {
     selectedDay: DayProps;
@@ -22,7 +27,9 @@ interface LogProps {
 }
 
 const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
-    const [t] = useTranslation();
+    // <html lang> is empty on the gym, i18next is what knows the page language
+    const [t, i18n] = useTranslation();
+    const allSessions = useSessionsQuery();
     const displayWeightUnit = useDisplayWeightUnit();
     // Entries without their own unit fall back to the one of the category
     const categoryUnit = useBodyWeightCategoryQuery().data?.unit ?? 'kg';
@@ -136,11 +143,14 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                             <List sx={{ pl: 4, pt: 0 }}>
                                 {session.logs.map((log) => (
                                     <ListItem key={log.id} dense>
-                                        <ListItemText
-                                            primary={log.exerciseObj?.getTranslation().name}
-                                            secondary={`${log.repetitions} × ${log.weight} `}
-                                        />
+                                        <ListItemText primary={log.exerciseObj?.getTranslation().name} secondary={<SetSummary log={log} sessions={allSessions.data ?? []} />} />
                                     </ListItem>))}
+                                <ListItem>
+                                    <Stack direction="row" spacing={1}>
+                                        <Button href={makeLink(WgerLink.SESSION_DETAIL, i18n.language, { id: session.id! })}>View workout</Button>
+                                        <Button href={makeLink(WgerLink.SESSION_EDIT, i18n.language, { id: session.id! })} startIcon={<EditIcon />}>Edit sets</Button>
+                                    </Stack>
+                                </ListItem>
                             </List>
                         </Collapse>
                     </React.Fragment>)}

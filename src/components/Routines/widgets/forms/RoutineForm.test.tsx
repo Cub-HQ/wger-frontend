@@ -36,10 +36,10 @@ describe('RoutineForm', () => {
         // Assert
         expect(screen.getByRole('textbox', { name: /name/i })).toHaveValue('Test routine 1');
         const groupStart = screen.getByRole('group', { name: /start/i });
-        expect(within(groupStart).getByRole('textbox', { hidden: true })).toHaveValue('05/01/2024');
+        expect(within(groupStart).getByRole('textbox', { hidden: true })).toHaveValue('01/05/2024');
 
         const groupEnd = screen.getByRole('group', { name: /end/i });
-        expect(within(groupEnd).getByRole('textbox', { hidden: true })).toHaveValue('06/01/2024');
+        expect(within(groupEnd).getByRole('textbox', { hidden: true })).toHaveValue('01/06/2024');
         expect(screen.getByRole('textbox', { name: /description/i })).toHaveValue('Full body routine');
     });
 
