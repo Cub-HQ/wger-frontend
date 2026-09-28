@@ -125,8 +125,8 @@ describe('Entries Component', () => {
 
         // The logs are rendered as "repetitions × weight" per exercise
         expect(screen.getAllByText('Squats').length).toBe(testWorkoutLogs.length);
-        expect(screen.getByText(/^8 × 80/)).toBeInTheDocument();
-        expect(screen.getByText(/^8 × 82.5/)).toBeInTheDocument();
+        expect(screen.getByText(/^8 reps × 80 kg/)).toBeInTheDocument();
+        expect(screen.getByText(/^8 reps × 82.5 kg/)).toBeInTheDocument();
     });
 
     test('Shows every session of the day', async () => {
@@ -157,7 +157,7 @@ describe('Entries Component', () => {
         const user = userEvent.setup();
         await user.click(screen.getByText(/morning workout/));
 
-        expect(screen.getByText(/^8 × 80/)).toBeInTheDocument();
+        expect(screen.getByText(/^8 reps × 80 kg/)).toBeInTheDocument();
     });
 
     test('Shows the nutrition diary entries in a collapsible', async () => {
