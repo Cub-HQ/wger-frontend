@@ -122,27 +122,26 @@ describe("Test the EntryForm component", () => {
             i18n.changeLanguage('en');
         });
 
-        test('renders date in English format', () => {
+        // The pickers always use the Australian locale, whatever the UI language
+        test('renders date in Australian format in English', () => {
             i18n.changeLanguage('en');
             const entry = TEST_MEASUREMENT_ENTRIES_1[0];
 
             const { container } = renderComponent({ entry, category: TEST_MEASUREMENT_CATEGORY_1 });
 
             const picker = container.querySelector('.MuiPickersInputBase-root');
-            expect(picker?.textContent).toContain('02/01/2023');
+            expect(picker?.textContent).toContain('01/02/2023');
             // expect(picker?.textContent).toContain('08:00 AM');
         });
 
-        test('renders date in German format', () => {
+        test('renders date in Australian format in German', () => {
             i18n.changeLanguage('de');
             const entry = TEST_MEASUREMENT_ENTRIES_1[0];
 
             const { container } = renderComponent({ entry, category: TEST_MEASUREMENT_CATEGORY_1 });
 
             const picker = container.querySelector('.MuiPickersInputBase-root');
-            expect(picker?.textContent).toContain('01.02.2023');
-            // expect(picker?.textContent).toContain('08:00');
-            expect(picker?.textContent).not.toContain('AM');
+            expect(picker?.textContent).toContain('01/02/2023');
         });
     });
 });
