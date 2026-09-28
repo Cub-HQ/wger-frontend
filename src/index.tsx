@@ -14,6 +14,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter as Router } from 'react-router-dom';
 
 import App from './App';
+import { mountProgressionChartRangeSetting } from "@/components/Routines/widgets/progressionChartRange";
 import './i18n';
 import './index.css';
 
@@ -124,6 +125,7 @@ if (rootNoShadowDom) {
 }
 
 renderComponentShadowDom('react-page');
+mountProgressionChartRangeSetting();
 
 // On the app pages (all behind a login) report the browser's timezone to the
 // profile. Not on the public embeds like the ingredient search, where the
