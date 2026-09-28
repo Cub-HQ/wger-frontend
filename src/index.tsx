@@ -1,4 +1,5 @@
 import { IngredientSearch } from "@/components/Nutrition";
+import { mountProgressionChartRangeSetting } from "@/components/Routines";
 import { syncProfileTimezone } from "@/components/User";
 import { LoadingWidget } from "@/core/ui/LoadingWidget/LoadingWidget";
 import { WgerRoutes } from "@/routes";
@@ -14,7 +15,6 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter as Router } from 'react-router-dom';
 
 import App from './App';
-import { mountProgressionChartRangeSetting } from "@/components/Routines/widgets/progressionChartRange";
 import './i18n';
 import './index.css';
 
