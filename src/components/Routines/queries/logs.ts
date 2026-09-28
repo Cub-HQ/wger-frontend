@@ -3,7 +3,8 @@ import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
 import { addLogs, deleteLog, editLog, getRoutineLogs } from "@/components/Routines/api/workoutLogs";
 import { QueryKey } from "@/core/lib/consts";
 
-export function useDeleteRoutineLogQuery(routineId: number) {
+// Quick log sessions have no routine (null): no routine's log data or stats to refresh
+export function useDeleteRoutineLogQuery(routineId: number | null) {
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -23,7 +24,7 @@ export function useRoutineLogQuery(id: number, loadExercises: boolean = false, f
     });
 }
 
-export function useEditRoutineLogQuery(routineId: number) {
+export function useEditRoutineLogQuery(routineId: number | null) {
     const queryClient = useQueryClient();
 
     return useMutation({

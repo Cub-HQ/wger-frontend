@@ -112,7 +112,7 @@ export const QuickWorkout = () => {
     const save = async () => {
         if (!exercise) return;
         const now = new Date();
-        const session = await addSession(new WorkoutSession({ id: null, dayId: null as unknown as number, routineId: null as unknown as number, notes: name, impression: "2", datetimeStart: now, datetimeEnd: null }));
+        const session = await addSession(new WorkoutSession({ id: null, dayId: null, routineId: null, notes: name, impression: "2", datetimeStart: now, datetimeEnd: null }));
         const rep = repUnits.data?.find(unit => unit.name.toLowerCase() === "repetitions");
         const seconds = repUnits.data?.find(unit => unit.name.toLowerCase() === "seconds");
         const kilometers = repUnits.data?.find(unit => unit.name.toLowerCase() === "kilometers");

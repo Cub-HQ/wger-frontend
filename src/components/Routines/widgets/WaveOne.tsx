@@ -154,7 +154,7 @@ export const SessionDetail = () => {
                 <ExerciseDemoLink exercise={logs[0].exerciseObj!} />
                 <ExerciseLog
                     exercise={logs[0].exerciseObj!}
-                    routineId={session.routineId!}
+                    routineId={session.routineId}
                     logEntries={logs}
                     displayDate={session.datetimeStart}
                     chartEntries={(sessionsQuery.data ?? []).flatMap(candidate =>
