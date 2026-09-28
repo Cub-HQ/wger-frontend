@@ -47,6 +47,10 @@ export class WorkoutSession {
         this.logs = params.logs ?? [];
     }
 
+    static clone(session: WorkoutSession, overrides: Partial<WorkoutSessionParams>) {
+        return new WorkoutSession({ id: overrides.id ?? session.id, dayId: overrides.dayId ?? session.dayId, routineId: overrides.routineId ?? session.routineId, datetimeStart: overrides.datetimeStart ?? session.datetimeStart, datetimeEnd: overrides.datetimeEnd !== undefined ? overrides.datetimeEnd : session.datetimeEnd, notes: overrides.notes !== undefined ? overrides.notes : session.notes, impression: overrides.impression ?? session.impression, dayObj: overrides.dayObj ?? session.dayObj, logs: overrides.logs ?? session.logs });
+    }
+
     // get the impression as a translated string
     get impressionString(): string {
         switch (this.impression) {
