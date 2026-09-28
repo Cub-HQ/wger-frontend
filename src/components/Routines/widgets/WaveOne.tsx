@@ -13,6 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ExerciseDemoLink, SessionMetadataEditor, SessionTimer } from "@/components/Routines/widgets/WaveThree";
 
+const withDate = (log: WorkoutLog, date: Date) => Object.assign(Object.create(Object.getPrototypeOf(log)), log, { date: new Date(date.getTime()) }) as WorkoutLog;
 const present = (value: number | null) => value !== null && value !== undefined;
 const number = (value: number | null) => value === null ? "—" : Number.isInteger(value) ? value.toString() : value.toFixed(1);
 const duration = (seconds: number) => {
@@ -144,7 +145,16 @@ export const SessionDetail = () => {
         <Box id="edit">
             {Array.from(grouped.values()).map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
                 <ExerciseDemoLink exercise={logs[0].exerciseObj!} />
-                <ExerciseLog exercise={logs[0].exerciseObj!} routineId={session.routineId} logEntries={logs} />
+                <ExerciseLog
+                    exercise={logs[0].exerciseObj!}
+                    routineId={session.routineId}
+                    logEntries={logs}
+                    displayDate={session.datetimeStart}
+                    chartEntries={(sessionsQuery.data ?? []).flatMap(candidate =>
+                        candidate.logs.filter(log => log.exerciseId === logs[0].exerciseId)
+                            .map(log => withDate(log, candidate.datetimeStart))
+                    ).sort((a, b) => a.date.getTime() - b.date.getTime())}
+                />
                 <Typography variant="caption">Planned {logs.filter(log => log.slotEntryId !== null).length} · completed {logs.length}</Typography>
                 <Button disabled={adding} onClick={() => addSet(logs.at(-1)!)}>+ Add set</Button>
             </Box>)}
@@ -155,7 +165,8 @@ export const SessionDetail = () => {
 export const ExerciseProgression = ({ exerciseId }: { exerciseId: number }) => {
     const { lang = "en" } = useParams();
     const sessionsQuery = useSessionsQuery();
-    const logs = useMemo(() => (sessionsQuery.data ?? []).flatMap(session => session.logs)
+    const logs = useMemo(() => (sessionsQuery.data ?? []).flatMap(session => session.logs
+        .map(log => withDate(log, session.datetimeStart)))
         .filter(log => log.exerciseId === exerciseId)
         .sort((a, b) => a.date.getTime() - b.date.getTime()), [sessionsQuery.data, exerciseId]);
     if (sessionsQuery.isLoading) return <CircularProgress />;

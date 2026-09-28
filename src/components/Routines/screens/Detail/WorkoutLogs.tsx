@@ -29,17 +29,27 @@ export const WorkoutLogs = () => {
         return <p>Error: {error.message}</p>;
     }
 
+    const withWorkoutDate = (log: WorkoutLog, date: Date) => Object.assign(Object.create(Object.getPrototypeOf(log)), log, { date: new Date(date.getTime()) }) as WorkoutLog;
+
     // Group by exercise
     let groupedWorkoutLogs: Map<number, WorkoutLog[]> = new Map();
+    const groupedWorkoutChartLogs: Map<number, WorkoutLog[]> = new Map();
+    const workoutDates = new Map<string, Date>();
 
     groupedWorkoutLogs = routineLogDataQuery.data!.reduce((r, routineLogData) => {
         routineLogData.logs.forEach(log => {
             const exerciseId = log.exerciseId;
+            const workoutDate = routineLogData.session.datetimeStart;
             r.set(exerciseId, r.get(exerciseId) || []);
             r.get(exerciseId)!.push(log);
+            groupedWorkoutChartLogs.set(exerciseId, groupedWorkoutChartLogs.get(exerciseId) || []);
+            groupedWorkoutChartLogs.get(exerciseId)!.push(withWorkoutDate(log, workoutDate));
+            workoutDates.set(log.id, workoutDate);
         });
         return r;
     }, groupedWorkoutLogs);
+
+    for (const logs of groupedWorkoutChartLogs.values()) logs.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const plannedDays = routineQuery.data!.dayDataCurrentIterationFiltered
         .filter((dayData) => !dayData.day!.isRest);
@@ -105,6 +115,8 @@ export const WorkoutLogs = () => {
                                 routineId={routineId}
                                 exercise={exercise}
                                 logEntries={groupedWorkoutLogs.get(exercise.id!)!}
+                                displayDates={workoutDates}
+                                chartEntries={groupedWorkoutChartLogs.get(exercise.id!)}
                             />)
                     )}
                 </React.Fragment>
@@ -121,6 +133,8 @@ export const WorkoutLogs = () => {
                         routineId={routineId}
                         exercise={exercise}
                         logEntries={groupedWorkoutLogs.get(exercise.id!)}
+                        displayDates={workoutDates}
+                        chartEntries={groupedWorkoutChartLogs.get(exercise.id!)}
                     />
                 )}
             </>}
