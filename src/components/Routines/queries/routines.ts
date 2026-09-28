@@ -23,10 +23,11 @@ export function useRoutinesQuery() {
     });
 }
 
-export function useRoutineDetailQuery(id: number) {
+export function useRoutineDetailQuery(id: number, enabled = true) {
     return useQuery({
         queryKey: [QueryKey.ROUTINE_DETAIL, id],
-        queryFn: () => getRoutine(id)
+        queryFn: () => getRoutine(id),
+        enabled,
     });
 }
 

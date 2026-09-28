@@ -5,6 +5,8 @@ import {
 } from "@/components/Measurements/api/measurements";
 import { getNutritionalDiaryEntries } from "@/components/Nutrition/api/nutritionalDiary";
 import { getSessions } from "@/components/Routines/api/session";
+import { deleteSession } from "@/components/Routines/api/sessionRecovery";
+import { WorkoutSession } from "@/components/Routines";
 import { getBodyWeightCategory, getWeights } from "@/components/Measurements/api/bodyWeight";
 import { TEST_DIARY_ENTRY_1, TEST_DIARY_ENTRY_2 } from "@/tests/nutritionDiaryTestdata";
 import { testQueryClient } from "@/tests/queryClient";
@@ -16,7 +18,7 @@ import {
 import { testWorkoutSession } from "@/tests/workoutLogsRoutinesTestData";
 import { dateToYYYYMMDD } from "@/core/lib/date";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import i18n from "i18next";
 import React from "react";
@@ -28,6 +30,7 @@ import CalendarComponent from "./CalendarComponent";
 vi.mock("@/components/Measurements/api/measurements");
 vi.mock("@/components/Nutrition/api/nutritionalDiary");
 vi.mock("@/components/Routines/api/session");
+vi.mock("@/components/Routines/api/sessionRecovery");
 vi.mock("@/components/Measurements/api/bodyWeight");
 vi.mock('@/components/User/queries/profile', () => ({
     useProfileQuery: () => ({ isLoading: false, data: { useMetric: true } }),
@@ -248,6 +251,83 @@ describe('CalendarComponent', () => {
         });
         expect(getNutritionalDiaryEntries).toHaveBeenCalledWith({
             filtersetQuery: { "datetime__gte": start, "datetime__lt": end },
+        });
+    });
+
+    describe('deleting a logged workout', () => {
+        const logged = WorkoutSession.clone(testWorkoutSession, { datetimeStart: new Date(currentYear, currentMonth, 10, 10, 30) });
+        let sessions: WorkoutSession[];
+
+        beforeEach(() => {
+            sessions = [logged];
+            (getSessions as Mock).mockImplementation(() => Promise.resolve(sessions));
+        });
+
+        const openDelete = async () => {
+            renderComponent();
+            await user.click(await screen.findByTestId(`day-${dateToYYYYMMDD(logged.datetimeStart)}`));
+            await user.click(await screen.findByText('routines.workoutSession'));
+            // the delete sits next to the existing actions, which stay as they are
+            expect(screen.getByRole('link', { name: 'View workout' })).toBeInTheDocument();
+            expect(screen.getByRole('link', { name: 'Edit sets' })).toBeInTheDocument();
+            await user.click(screen.getByRole('button', { name: 'Delete workout' }));
+            return screen.findByRole('dialog', { name: 'Delete workout?' });
+        };
+
+        test('cancel does not delete', async () => {
+            const dialog = await openDelete();
+            expect(within(dialog).getByText(/10\/12\/2024.*15 days/)).toBeInTheDocument();
+
+            await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+            await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+            expect(deleteSession).not.toHaveBeenCalled();
+            expect(screen.getByRole('link', { name: 'View workout' })).toBeInTheDocument();
+        });
+
+        test('sends one request and refreshes the calendar', async () => {
+            let finish!: () => void;
+            (deleteSession as Mock).mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+            const dialog = await openDelete();
+            const reads = (getSessions as Mock).mock.calls.length;
+            const confirm = within(dialog).getByRole('button', { name: 'Delete workout' });
+
+            fireEvent.click(confirm);
+            fireEvent.click(confirm);
+
+            await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(1));
+            expect((deleteSession as Mock).mock.calls[0][0]).toBe(logged.id);
+            expect(within(dialog).getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+            sessions = [];
+            finish();
+
+            expect(await screen.findByRole('status')).toHaveTextContent('15 days');
+            await waitFor(() => expect(screen.queryByText('routines.workoutSession')).toBeNull());
+            expect((getSessions as Mock).mock.calls.length).toBeGreaterThan(reads);
+            expect(deleteSession).toHaveBeenCalledTimes(1);
+        });
+
+        test('a failed delete keeps the workout', async () => {
+            (deleteSession as Mock).mockRejectedValue(new Error('server refused'));
+            const dialog = await openDelete();
+            const reads = (getSessions as Mock).mock.calls.length;
+
+            await user.click(within(dialog).getByRole('button', { name: 'Delete workout' }));
+
+            expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not delete');
+            await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+            expect(await screen.findByRole('link', { name: 'View workout' })).toBeInTheDocument();
+            expect(getSessions).toHaveBeenCalledTimes(reads);
+        });
+
+        test('an unsaved session has no delete', async () => {
+            sessions = [WorkoutSession.clone(logged, {})];
+            sessions[0].id = null;
+            renderComponent();
+            await user.click(await screen.findByTestId(`day-${dateToYYYYMMDD(logged.datetimeStart)}`));
+            await user.click(await screen.findByText('routines.workoutSession'));
+
+            expect(screen.queryByRole('button', { name: 'Delete workout' })).toBeNull();
         });
     });
 });

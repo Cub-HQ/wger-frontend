@@ -1,11 +1,17 @@
 import { useBodyWeightCategoryQuery, useDisplayWeightUnit } from "@/components/Measurements";
-import { dateToLocale } from "@/core/lib/date";
+import { dateTimeToLocale, dateToLocale } from "@/core/lib/date";
 import { ExpandLess, ExpandMore } from '@mui/icons-material';
 import {
+    Alert,
     Card,
     CardContent,
     CardHeader,
     Collapse,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
     List,
     ListItem,
     ListItemButton,
@@ -16,7 +22,7 @@ import React from 'react';
 import { useTranslation } from "react-i18next";
 import type { DayProps } from "./CalendarComponent";
 import { SetSummary } from "@/components/Routines/widgets/WaveOne";
-import { useSessionsQuery } from "@/components/Routines";
+import { useDeleteSessionQuery, useSessionsQuery, WorkoutSession } from "@/components/Routines";
 import EditIcon from "@mui/icons-material/Edit";
 import { Button, Stack } from "@mui/material";
 import { makeLink, WgerLink } from "@/core/lib/url";
@@ -38,6 +44,38 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
     // A day can hold several sessions, at most one of them is expanded
     const [openSessionId, setOpenSessionId] = React.useState<string | null>(null);
     const [openNutritionDiary, setOpenNutritionDiary] = React.useState(false);
+
+    // Same confirm-then-delete flow as the routine logs; the server keeps the
+    // session restorable for 15 days
+    const [deleting, setDeleting] = React.useState<WorkoutSession | null>(null);
+    const [message, setMessage] = React.useState('');
+    const [error, setError] = React.useState('');
+    const deletion = useDeleteSessionQuery(deleting?.routineId ?? 0);
+    // Lock synchronously as well as disabling controls: double clicks can precede a render
+    const inFlight = React.useRef(false);
+    const sessionLabel = (session: WorkoutSession) => `${session.dayObj?.name || 'Workout'} — ${dateTimeToLocale(session.datetimeStart)}`;
+    const closeDelete = () => {
+        if (!inFlight.current) {
+            setDeleting(null);
+            setError('');
+        }
+    };
+    const confirmDelete = async () => {
+        if (!deleting?.id || inFlight.current) return;
+        inFlight.current = true;
+        setError('');
+        setMessage('');
+        try {
+            // Resolves after the calendar's sessions were refetched
+            await deletion.mutateAsync(deleting.id);
+            setDeleting(null);
+            setMessage('Workout deleted. You can restore it from Deleted workouts on the routine logs for 15 days.');
+        } catch {
+            setError('Could not delete this workout. Your workout has not been hidden. Please try again.');
+        } finally {
+            inFlight.current = false;
+        }
+    };
 
     isStandalone = isStandalone ?? true;
 
@@ -71,6 +109,7 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                 flexDirection: 'column',
                 gap: 2
             }}>
+                {message && <Alert severity="success" role="status">{message}</Alert>}
                 <List>
                     {/* Weight entries */}
                     {selectedDay.weightEntry &&
@@ -149,6 +188,8 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                                     <Stack direction="row" spacing={1}>
                                         <Button href={makeLink(WgerLink.SESSION_DETAIL, i18n.language, { id: session.id! })}>View workout</Button>
                                         <Button href={makeLink(WgerLink.SESSION_EDIT, i18n.language, { id: session.id! })} startIcon={<EditIcon />}>Edit sets</Button>
+                                        {/* Only a saved session can go through the session API */}
+                                        {session.id && <Button color="error" disabled={deletion.isPending} onClick={() => { setError(''); setMessage(''); setDeleting(session); }}>Delete workout</Button>}
                                     </Stack>
                                 </ListItem>
                             </List>
@@ -181,6 +222,17 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                 </List>
 
             </CardContent>
+            <Dialog open={deleting !== null} onClose={closeDelete} aria-labelledby="calendar-delete-workout-title" aria-describedby="calendar-delete-workout-description">
+                <DialogTitle id="calendar-delete-workout-title">Delete workout?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="calendar-delete-workout-description">{deleting && sessionLabel(deleting)}. This removes the workout and all its sets. You can restore them from Deleted workouts on the routine logs for 15 days.</DialogContentText>
+                    {error && <Alert severity="error">{error}</Alert>}
+                </DialogContent>
+                <DialogActions>
+                    <Button disabled={deletion.isPending} onClick={closeDelete}>Cancel</Button>
+                    <Button color="error" disabled={deletion.isPending} onClick={() => { void confirmDelete(); }}>{deletion.isPending ? 'Deleting…' : 'Delete workout'}</Button>
+                </DialogActions>
+            </Dialog>
         </Card>
     );
 };

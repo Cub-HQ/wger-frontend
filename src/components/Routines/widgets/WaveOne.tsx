@@ -1,8 +1,10 @@
 import EditIcon from "@mui/icons-material/Edit";
 import { Box, Button, Card, CardActionArea, CardContent, Chip, CircularProgress, Divider, Stack, TextField, Typography } from "@mui/material";
 import { addLogs } from "@/components/Routines/api/workoutLogs";
+import { SetConfigData } from "@/components/Routines/models/SetConfigData";
 import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
+import { useRoutineDetailQuery } from "@/components/Routines/queries/routines";
 import { useFetchRoutineRepUnitsQuery, useFetchRoutineWeighUnitsQuery } from "@/components/Routines/queries/units";
 import { useSessionsQuery } from "@/components/Routines/queries/sessions";
 import { ExerciseLog, TimeSeriesChart } from "@/components/Routines/widgets/LogWidgets";
@@ -118,11 +120,48 @@ export const WorkoutsOverview = () => {
     </Box>;
 };
 
+const range = (low: number | null, high: number | null) => low === null ? null : high !== null && high !== low ? `${number(low)}–${number(high)}` : number(low);
+
+// What the routine asked for, e.g. "4 sets × 8, 90s rest between sets"
+export const prescription = (config: SetConfigData) => {
+    const reps = range(config.repetitions, config.maxRepetitions);
+    const unit = config.repetitionsUnit && !/repetition/i.test(config.repetitionsUnit.name) ? ` ${config.repetitionsUnit.name.toLowerCase()}` : "";
+    const rest = range(config.restTime, config.maxRestTime);
+    const sets = `${range(config.nrOfSets, config.maxNrOfSets)} ${config.nrOfSets === 1 && config.maxNrOfSets === null ? "set" : "sets"}`;
+    return `${sets}${reps ? ` × ${reps}${unit}` : ""}${rest ? `, ${rest}s rest between sets` : ""}`;
+};
+
+// One exercise of a logged session: only the sets that were recorded, each
+// next to how it compares to the last time the exercise was done
+const ExerciseSummary = ({ logs, sessions, target }: { logs: WorkoutLog[], sessions: WorkoutSession[], target: string | null }) => {
+    const exercise = logs[0].exerciseObj;
+    const name = exercise?.getTranslation().name ?? "Unknown exercise";
+    return <Card component="section" aria-label={name} variant="outlined" sx={{ borderLeft: 4, borderLeftColor: "primary.main" }}>
+        <CardContent>
+            <Stack direction="row" spacing={2} sx={{ alignItems: "center", mb: 1.5 }}>
+                {exercise?.mainImage && <Box component="img" src={exercise.mainImage.url} alt="" sx={{ width: 64, height: 64, objectFit: "cover", borderRadius: 1, flexShrink: 0 }} />}
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="h6" component="h2">{name}</Typography>
+                    {target && <Typography variant="body2" color="text.secondary">Target: {target}</Typography>}
+                </Box>
+            </Stack>
+            <Stack component="ol" spacing={1} sx={{ listStyle: "none", p: 0, m: 0 }}>
+                {logs.map((log, index) => <Stack component="li" key={log.id} direction="row" spacing={2} sx={{ alignItems: { sm: "center" } }}>
+                    <Typography color="text.secondary" sx={{ minWidth: 48, flexShrink: 0 }}>Set {index + 1}</Typography>
+                    <SetSummary log={log} sessions={sessions} />
+                </Stack>)}
+            </Stack>
+        </CardContent>
+    </Card>;
+};
+
 export const SessionDetail = () => {
     const { sessionId = "" } = useParams();
     const sessionsQuery = useSessionsQuery();
     const queryClient = useQueryClient();
     const session = sessionsQuery.data?.find(item => item.id === sessionId);
+    // Quick logs have no routine, so there is nothing they were prescribed
+    const routineQuery = useRoutineDetailQuery(session?.routineId ?? 0, Boolean(session?.routineId));
     const [adding, setAdding] = useState(false);
     // Edit sets links land on #edit, which only exists once the sessions have loaded
     const { hash } = useLocation();
@@ -135,6 +174,13 @@ export const SessionDetail = () => {
     if (!session) return <Typography color="error">Workout session not found.</Typography>;
     const grouped = new Map<number, WorkoutLog[]>();
     session.logs.forEach(log => grouped.set(log.exerciseId, [...(grouped.get(log.exerciseId) ?? []), log]));
+    // Same order SetSummary pairs the sets with the previous session in
+    const exercises = Array.from(grouped.values(), logs => [...logs].sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0)));
+    const targetOf = (logs: WorkoutLog[]) => {
+        const planned = logs.find(log => log.slotEntryId !== null && log.iteration !== null);
+        const config = planned && routineQuery.data?.getSetConfigData(session.dayId, planned.iteration!, planned.slotEntryId!);
+        return config ? prescription(config) : null;
+    };
     const addSet = async (last: WorkoutLog) => {
         setAdding(true);
         try {
@@ -146,11 +192,16 @@ export const SessionDetail = () => {
         <Typography variant="h4">{sessionName(session)}</Typography>
         <Typography color="text.secondary" sx={{ mb: 2 }}>{dateToLocale(session.datetimeStart)} · stable session {session.id}</Typography>
         <SessionTimer session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
-        <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
         <Button startIcon={<EditIcon />} href="#edit" variant="contained" sx={{ mb: 2 }}>Edit workout sets</Button>
+        <Stack spacing={2} sx={{ mb: 3 }}>
+            {exercises.map(logs => <ExerciseSummary key={logs[0].exerciseId} logs={logs} sessions={sessionsQuery.data ?? []} target={targetOf(logs)} />)}
+            {exercises.length === 0 && <Typography color="text.secondary">No sets were recorded in this workout.</Typography>}
+        </Stack>
         <Divider />
-        <Box id="edit" ref={editRef}>
-            {Array.from(grouped.values()).map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
+        <Box id="edit" ref={editRef} sx={{ pt: 2 }}>
+            <Typography variant="h5" component="h2" sx={{ mb: 1 }}>Edit sets</Typography>
+            <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
+            {exercises.map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
                 <ExerciseDemoLink exercise={logs[0].exerciseObj!} />
                 <ExerciseLog
                     exercise={logs[0].exerciseObj!}
