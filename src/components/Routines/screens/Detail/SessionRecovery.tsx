@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { WorkoutSession } from '@/components/Routines/models/WorkoutSession';
 import { useDeleteSessionQuery, useRestoreSessionQuery, useSessionRecoveriesQuery } from '@/components/Routines/queries/sessionRecovery';
+import { makeLink, WgerLink } from '@/core/lib/url';
 
 export const SessionRecoveryControls = ({ routineId, sessions }: { routineId: number; sessions: WorkoutSession[] }) => {
     const { i18n } = useTranslation();
@@ -59,8 +60,8 @@ export const SessionRecoveryControls = ({ routineId, sessions }: { routineId: nu
             {uniqueSessions.map(session => <Stack key={session.id} component="article" aria-label={label(session)} spacing={1} sx={{ my: 2 }}>
                 <Typography>{label(session)}</Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                    <Button component={Link} to={`/${i18n.language}/routine/session/${session.id}`}>View workout</Button>
-                    <Button component={Link} to={`/${i18n.language}/routine/session/${session.id}#edit`}>Edit sets</Button>
+                    <Button component={Link} to={makeLink(WgerLink.SESSION_DETAIL, i18n.language, { id: session.id! })}>View workout</Button>
+                    <Button component={Link} to={makeLink(WgerLink.SESSION_EDIT, i18n.language, { id: session.id! })}>Edit sets</Button>
                     <Button color="error" disabled={pending} onClick={() => { setError(''); setSelected(session); }}>Delete</Button>
                 </Stack>
             </Stack>)}

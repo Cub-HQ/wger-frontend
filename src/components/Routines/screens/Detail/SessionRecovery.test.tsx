@@ -9,7 +9,8 @@ import { QueryKey } from '@/core/lib/consts';
 import { SESSION_RECOVERIES } from '@/components/Routines/queries/sessionRecovery';
 
 vi.mock('axios', () => ({ default: { get: vi.fn(), delete: vi.fn(), post: vi.fn() } }));
-vi.mock('react-i18next', async importOriginal => ({ ...await importOriginal<typeof import('react-i18next')>(), useTranslation: () => Object.assign([(key: string) => key, { language: 'en-au' }], { i18n: { language: 'en-au' } }) }));
+// i18next canonicalises the gym's /en-au/ path to "en-AU"; links must still point at the lowercase Django route
+vi.mock('react-i18next', async importOriginal => ({ ...await importOriginal<typeof import('react-i18next')>(), useTranslation: () => Object.assign([(key: string) => key, { language: 'en-AU' }], { i18n: { language: 'en-AU' } }) }));
 vi.mock('@/core/ui/Widgets/Container', () => ({ WgerContainerFullWidth: ({ children }: { children: React.ReactNode }) => <main>{children}</main> }));
 vi.mock('@/components/Routines/widgets/LogWidgets', () => ({ ExerciseLog: ({ logEntries }: { logEntries?: { id: string }[] }) => <div>{logEntries?.map(log => <span key={log.id}>Set {log.id}</span>)}</div> }));
 vi.mock('@/components/Routines/queries', () => ({

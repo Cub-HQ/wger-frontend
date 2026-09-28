@@ -22,10 +22,10 @@ export const WorkoutSubMenu = () => {
                 <MenuItem component={Link} to={makeLink(WgerLink.CALENDAR, i18n.language)}>
                     Calendar
                 </MenuItem>
-                <MenuItem component={Link} to={`/${i18n.language}/routine/workouts`}>
+                <MenuItem component={Link} to={makeLink(WgerLink.WORKOUTS_OVERVIEW, i18n.language)}>
                     All workouts
                 </MenuItem>
-                <MenuItem component={Link} to={`/${i18n.language}/routine/quick`}>
+                <MenuItem component={Link} to={makeLink(WgerLink.WORKOUT_QUICK_LOG, i18n.language)}>
                     Log a workout
                 </MenuItem>
             </Menu>

@@ -19,6 +19,7 @@ import { SetSummary } from "@/components/Routines/widgets/WaveOne";
 import { useSessionsQuery } from "@/components/Routines";
 import EditIcon from "@mui/icons-material/Edit";
 import { Button, Stack } from "@mui/material";
+import { makeLink, WgerLink } from "@/core/lib/url";
 
 interface LogProps {
     selectedDay: DayProps;
@@ -26,8 +27,8 @@ interface LogProps {
 }
 
 const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
-    const [t] = useTranslation();
-    const lang = document.documentElement.lang || "en";
+    // <html lang> is empty on the gym, i18next is what knows the page language
+    const [t, i18n] = useTranslation();
     const allSessions = useSessionsQuery();
     const displayWeightUnit = useDisplayWeightUnit();
     // Entries without their own unit fall back to the one of the category
@@ -146,8 +147,8 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                                     </ListItem>))}
                                 <ListItem>
                                     <Stack direction="row" spacing={1}>
-                                        <Button href={`/${lang}/routine/session/${session.id}`}>View workout</Button>
-                                        <Button href={`/${lang}/routine/session/${session.id}#edit`} startIcon={<EditIcon />}>Edit sets</Button>
+                                        <Button href={makeLink(WgerLink.SESSION_DETAIL, i18n.language, { id: session.id! })}>View workout</Button>
+                                        <Button href={makeLink(WgerLink.SESSION_EDIT, i18n.language, { id: session.id! })} startIcon={<EditIcon />}>Edit sets</Button>
                                     </Stack>
                                 </ListItem>
                             </List>

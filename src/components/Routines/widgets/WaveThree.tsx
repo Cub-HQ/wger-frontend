@@ -6,7 +6,7 @@ import { addLogs } from "@/components/Routines/api/workoutLogs";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
 import { useFetchRoutineRepUnitsQuery, useFetchRoutineWeighUnitsQuery } from "@/components/Routines/queries/units";
 import { QueryKey } from "@/core/lib/consts";
-import { makeHeader, makeUrl } from "@/core/lib/url";
+import { makeHeader, makeLink, makeUrl, WgerLink } from "@/core/lib/url";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Box, Button, Card, CardContent, Divider, Stack, TextField, Typography } from "@mui/material";
 import axios from "axios";
@@ -126,7 +126,7 @@ export const QuickWorkout = () => {
         await addLogs(entries.map(entry => ({ date: now.toISOString(), session: session.id, iteration: null, exercise: exercise.id!, day: null, routine: null, slot_entry: null, ...entry, rir: null })));
         await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); setSaved(session.id);
     };
-    if (saved) return <Box sx={{ p: 2 }}><Alert severity="success">Workout saved.</Alert><Button component={Link} to={`/${lang}/routine/session/${saved}`}>Open workout</Button></Box>;
+    if (saved) return <Box sx={{ p: 2 }}><Alert severity="success">Workout saved.</Alert><Button component={Link} to={makeLink(WgerLink.SESSION_DETAIL, lang, { id: saved })}>Open workout</Button></Box>;
     return <Box sx={{ maxWidth: 700, mx: "auto", p: 2 }}><Stack spacing={2}>
         <Typography variant="h4">Log a workout</Typography><Typography>No routine picker. Add what you did and save.</Typography>
         <TextField label="Workout name" value={name} onChange={event => setName(event.target.value)} />
