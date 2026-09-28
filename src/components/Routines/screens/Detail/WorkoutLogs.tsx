@@ -10,6 +10,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { makeLink, WgerLink } from "@/core/lib/url";
+import { SessionRecoveryControls } from "./SessionRecovery";
 
 
 export const WorkoutLogs = () => {
@@ -85,6 +86,8 @@ export const WorkoutLogs = () => {
             <Typography variant={"body1"}>
                 {t('routines.logsFilterNote')}
             </Typography>
+
+            <SessionRecoveryControls routineId={routineId} sessions={routineLogDataQuery.data!.map(entry => entry.session)} />
 
             {plannedDays.map((dayData) =>
                 <React.Fragment key={dayData.day!.id}>
