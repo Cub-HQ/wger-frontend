@@ -64,3 +64,5 @@ export {
 export {
     useAddSessionQuery, useEditSessionQuery, useFindSessionsQuery, useSessionOfDay, useSessionsQuery
 } from "./sessions";
+
+export { useDeleteSessionQuery, useRestoreSessionQuery, useSessionRecoveriesQuery } from "./sessionRecovery";
