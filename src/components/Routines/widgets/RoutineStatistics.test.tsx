@@ -214,8 +214,8 @@ describe('Tests for the getFullStatsData function', () => {
         );
         expect(result.headers).toEqual(['Finger muscle', 'Shoulders']);
         expect(result.data).toEqual([
-            { key: "03/01/24", values: [15, 10] },
-            { key: "03/03/24", values: [18, 12] }
+            { key: "01/03/2024", values: [15, 10] },
+            { key: "03/03/2024", values: [18, 12] }
         ]);
         expect(result.totals).toEqual({ "Finger muscle": 33, "Shoulders": 22 });
     });
