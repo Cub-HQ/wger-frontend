@@ -27,8 +27,11 @@ export const MuscleOverview = ({ primaryMuscles, secondaryMuscles, isFront }: Ov
     return (
         <div
             style={{
-                height: "400px",
+                height: "auto",
                 width: "200px",
+                maxWidth: "100%",
+                aspectRatio: "1 / 2",
+                backgroundSize: "contain",
                 backgroundImage: backgroundUrl,
                 backgroundRepeat: "no-repeat"
             }} />
