@@ -17,6 +17,8 @@ export interface LogEntryForm {
     repetitionsTarget: number | string | null;
     weight: number | string;
     weightTarget: number | string | null;
+    rest: number | string | null;
+    restTarget: number | string | null;
 }
 
 

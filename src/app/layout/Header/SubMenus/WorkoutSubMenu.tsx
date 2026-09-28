@@ -25,6 +25,9 @@ export const WorkoutSubMenu = () => {
                 <MenuItem component={Link} to={`/${i18n.language}/routine/workouts`}>
                     All workouts
                 </MenuItem>
+                <MenuItem component={Link} to={`/${i18n.language}/routine/quick`}>
+                    Log a workout
+                </MenuItem>
             </Menu>
         </>
     );

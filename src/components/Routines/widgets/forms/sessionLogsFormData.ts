@@ -39,7 +39,9 @@ export function plannedLogs(routine: Routine, dayId: number, date: Date): {
                         repetitions: !hasNoIterationData && config.repetitions !== null ? config.repetitions : '',
                         repetitionsTarget: !hasNoIterationData && config.repetitions !== null ? config.repetitions : '',
                         weight: !hasNoIterationData && config.weight !== null ? config.weight : '',
-                        weightTarget: !hasNoIterationData && config.weight !== null ? config.weight : ''
+                        weightTarget: !hasNoIterationData && config.weight !== null ? config.weight : '',
+                        rest: '',
+                        restTarget: ''
                     });
                 }
             }

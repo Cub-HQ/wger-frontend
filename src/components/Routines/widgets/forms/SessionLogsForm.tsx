@@ -7,7 +7,10 @@ import {
 } from "@/components/Exercises";
 import { RIR_VALUES_SELECT } from "@/components/Routines/models/BaseConfig";
 import { LogEntryForm } from "@/components/Routines/models/WorkoutLog";
-import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay } from "@/components/Routines/queries";
+import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay, useSessionsQuery } from "@/components/Routines/queries";
+import { editSession } from "@/components/Routines/api/session";
+import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
+import { ExerciseDemoLink } from "@/components/Routines/widgets/WaveThree";
 import {
     logsPayload,
     plannedLogs,
@@ -70,7 +73,7 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
             dayId={dayId}
             routineId={routineId}
             selectedDate={selectedDate}
-            sessionId={session?.id}
+            session={session}
             iteration={iteration}
             language={language}
             defaultLogs={defaultLogs}
@@ -78,11 +81,11 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
     </>);
 };
 
-const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteration, language, defaultLogs }: {
+const SessionLogsFields = ({ dayId, routineId, selectedDate, session, iteration, language, defaultLogs }: {
     dayId: number,
     routineId: number,
     selectedDate: DateTime,
-    sessionId: string | null | undefined,
+    session: WorkoutSession | undefined,
     iteration: number | null,
     language: Language | undefined,
     defaultLogs: LogEntryForm[],
@@ -91,11 +94,13 @@ const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteratio
     const { t } = useTranslation();
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const addLogsQuery = useAddRoutineLogsQuery(routineId);
+    const sessionsQuery = useSessionsQuery();
     const handleSnackbarClose = () => setSnackbarOpen(false);
     const [exerciseIdToSwap, setExerciseIdToSwap] = useState<number | null>(null);
 
     // Counter for the keys of the logs the user adds on top of the planned ones
     const extraLogKey = useRef(0);
+    const pendingSubstitution = useRef<string | null>(null);
 
     const validationSchema = yup.object({
         logs: yup.array().of(
@@ -110,13 +115,22 @@ const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteratio
     const handleSubmit = async (values: SessionLogsFormValues) => {
         await addLogsQuery.mutateAsync(logsPayload(values.logs, {
             date: selectedDate,
-            sessionId,
+            sessionId: session?.id,
             iteration,
             dayId,
             routineId,
         }));
+        if (session && pendingSubstitution.current) {
+            await editSession(WorkoutSession.clone(session, { notes: `${session.notes ?? ""}
+${pendingSubstitution.current}`.trim() }));
+            pendingSubstitution.current = null;
+        }
         setSnackbarOpen(true);
     };
+
+    const previousFor = (exerciseId: number) => sessionsQuery.data?.flatMap(entry => entry.logs.map(log => ({ entry, log })))
+        .filter(item => item.log.exerciseId === exerciseId && item.entry.id !== session?.id && (!session || item.entry.datetimeStart < session.datetimeStart))
+        .sort((a, b) => b.entry.datetimeStart.getTime() - a.entry.datetimeStart.getTime())[0]?.log;
 
     const form = useAppForm({
         defaultValues: { logs: defaultLogs } as SessionLogsFormValues,
@@ -129,6 +143,10 @@ const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteratio
             return;
         }
 
+        const reason = window.prompt("Why are you substituting this exercise?", "");
+        if (reason === null) return;
+        const originalName = form.state.values.logs.find(log => exerciseIdToSwap === log.exercise!.id)?.exercise?.getTranslation(language).name;
+        pendingSubstitution.current = originalName ? `Substitution: ${exercise.getTranslation(language).name} for ${originalName}. Reason: ${reason}` : null;
         const updatedLogs = form.state.values.logs.map((log) => {
             if (exerciseIdToSwap === log.exercise!.id) {
                 // Empty the rest of the values, this is a new exercise not in the routine
@@ -152,6 +170,7 @@ const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteratio
 
     return (<>
         <form onSubmit={submitHandler(form)}>
+            <Alert severity="info">Added or removed sets affect this session only. Skipped rows are not saved as zeroes.</Alert>
             {/* The rows read every value of every log, which an array field does
               * not re-render for: it only follows the array's length */}
             <form.Subscribe selector={state => state.values.logs}>
@@ -161,10 +180,11 @@ const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteratio
                         {/* Only show the exercise name the first time it appears */}
                         {(index === 0 || logs[index - 1].exercise!.id !== log.exercise!.id) && <>
                             <Grid size={12}>
-                                {exerciseIdToSwap !== log.exercise!.id &&
-                                    <Typography variant="h6">
-                                        {log.exercise?.getTranslation(language).name}
-                                    </Typography>}
+                                {exerciseIdToSwap !== log.exercise!.id && <>
+                                    <Typography variant="h6">{log.exercise?.getTranslation(language).name}</Typography>
+                                    <ExerciseDemoLink exercise={log.exercise!} />
+                                    {previousFor(log.exercise!.id!) && <Typography color="text.secondary">Previous: {previousFor(log.exercise!.id!)?.repetitions ?? "—"} reps × {previousFor(log.exercise!.id!)?.weight ?? "—"} {previousFor(log.exercise!.id!)?.weightUnitObj?.name ?? ""}</Typography>}
+                                </>}
 
                                 {exerciseIdToSwap === log.exercise!.id &&
                                     <NameAutocompleter callback={handleCallback} />}
@@ -178,6 +198,7 @@ const SessionLogsFields = ({ dayId, routineId, selectedDate, sessionId, iteratio
                                     onClick={() => form.insertFieldValue('logs', index, {
                                         ...log,
                                         clientKey: `extra-${extraLogKey.current++}`,
+                                        slotEntry: null,
                                     })}
                                 >
                                     <AddIcon />

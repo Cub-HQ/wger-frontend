@@ -11,6 +11,7 @@ import { dateToLocale } from "@/core/lib/date";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ExerciseDemoLink, SessionMetadataEditor, SessionTimer } from "@/components/Routines/widgets/WaveThree";
 
 const present = (value: number | null) => value !== null && value !== undefined;
 const number = (value: number | null) => value === null ? "—" : Number.isInteger(value) ? value.toString() : value.toFixed(1);
@@ -136,11 +137,15 @@ export const SessionDetail = () => {
     return <Box sx={{ maxWidth: 1100, mx: "auto", p: 2 }}>
         <Typography variant="h4">{sessionName(session)}</Typography>
         <Typography color="text.secondary" sx={{ mb: 2 }}>{dateToLocale(session.datetimeStart)} · stable session {session.id}</Typography>
+        <SessionTimer session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
+        <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
         <Button startIcon={<EditIcon />} href="#edit" variant="contained" sx={{ mb: 2 }}>Edit workout sets</Button>
         <Divider />
         <Box id="edit">
             {Array.from(grouped.values()).map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
+                <ExerciseDemoLink exercise={logs[0].exerciseObj!} />
                 <ExerciseLog exercise={logs[0].exerciseObj!} routineId={session.routineId} logEntries={logs} />
+                <Typography variant="caption">Planned {logs.filter(log => log.slotEntryId !== null).length} · completed {logs.length}</Typography>
                 <Button disabled={adding} onClick={() => addSet(logs.at(-1)!)}>+ Add set</Button>
             </Box>)}
         </Box>
