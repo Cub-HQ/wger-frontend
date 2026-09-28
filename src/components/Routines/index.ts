@@ -48,3 +48,4 @@ export { useActiveRoutineQuery, useSessionsQuery } from "./queries";
 
 // Widgets
 export { SetConfigDataDetails } from "./widgets/RoutineDetailsCard";
+export { mountProgressionChartRangeSetting } from "./widgets/progressionChartRange";
