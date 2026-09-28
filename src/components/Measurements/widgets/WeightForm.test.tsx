@@ -61,7 +61,7 @@ describe("Test WeightForm component", () => {
         );
 
         // Assert
-        expect(screen.getByDisplayValue('12/10/2021 05:00 PM')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('10/12/2021 05:00 pm')).toBeInTheDocument();
         expect(screen.getByDisplayValue('80')).toBeInTheDocument();
         expect(screen.getAllByLabelText('date').length).toBeGreaterThan(0);
         expect(screen.getByLabelText('weight')).toBeInTheDocument();

@@ -28,12 +28,13 @@ describe('spansYears', () => {
 describe('dateTick', () => {
     const date = new Date(2023, 4, 17).getTime();
 
-    test('leaves the year out while the chart stays within one', () => {
-        expect(dateTick(false)(date)).not.toContain('23');
+    // The gym always shows Australian DD/MM/YYYY, so the tick keeps its year either way
+    test('is Australian DD/MM/YYYY while the chart stays within one year', () => {
+        expect(dateTick(false)(date)).toBe('17/05/2023');
     });
 
-    test('shows the year once the ticks need it', () => {
-        expect(dateTick(true)(date)).toContain('23');
+    test('is Australian DD/MM/YYYY once the chart spans years', () => {
+        expect(dateTick(true)(date)).toBe('17/05/2023');
     });
 });
 
