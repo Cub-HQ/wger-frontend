@@ -12,6 +12,7 @@ import { testWorkoutLogs, testWorkoutSession } from "@/tests/workoutLogsRoutines
 import { dateToLocale } from "@/core/lib/date";
 import { DayProps } from './CalendarComponent';
 import Entries from './Entries';
+import i18n from 'i18next';
 
 vi.mock("@/components/Measurements/api/bodyWeight");
 vi.mock('@/components/User/queries/profile', () => ({
@@ -127,6 +128,25 @@ describe('Entries Component', () => {
         expect(screen.getAllByText('Squats').length).toBe(testWorkoutLogs.length);
         expect(screen.getByText(/^8 reps × 80 kg/)).toBeInTheDocument();
         expect(screen.getByText(/^8 reps × 82.5 kg/)).toBeInTheDocument();
+    });
+
+    test('Links the session to its lowercase locale route', async () => {
+        // i18next reports the gym's /en-au/ path as "en-AU", and <html lang> is empty there
+        await i18n.changeLanguage('en-AU');
+        try {
+            render(
+                <QueryClientProvider client={testQueryClient}>
+                    <Entries selectedDay={{ ...defaultProps, workoutSessions: [new WorkoutSession({ ...testWorkoutSession, logs: testWorkoutLogs })] }} />
+                </QueryClientProvider>
+            );
+            await userEvent.setup().click(screen.getByText('routines.workoutSession'));
+
+            const id = testWorkoutSession.id;
+            expect(screen.getByRole('link', { name: 'View workout' })).toHaveAttribute('href', `/en-au/routine/session/${id}`);
+            expect(screen.getByRole('link', { name: 'Edit sets' })).toHaveAttribute('href', `/en-au/routine/session/${id}#edit`);
+        } finally {
+            await i18n.changeLanguage('en');
+        }
     });
 
     test('Shows every session of the day', async () => {
