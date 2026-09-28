@@ -4,6 +4,7 @@ import { DateTime, DateTimeFormatOptions } from "luxon";
 
 /** Milliseconds in a day. Only for durations; a calendar day can be 23 or 25 hours long */
 export const DAY_MS = 24 * 60 * 60 * 1000;
+const DISPLAY_LOCALE = 'en-AU';
 
 // Calendar arithmetic, not milliseconds: a DST day is 23 or 25 hours long
 export const dayOf = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -105,16 +106,16 @@ export function dateTimeToLocale(dateTime: Date | null, locale?: string, options
         return '';
     }
 
-    locale = locale ?? i18n.language;
+    locale = DISPLAY_LOCALE;
     options = options ?? {
-        year: '2-digit',
+        year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
     };
 
-    return dateTime.toLocaleString(locale ? [locale] : [], options);
+    return dateTime.toLocaleString(locale ? [locale] : [], { ...options, year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
 export function luxonDateTimeToLocale(dateTime: DateTime | null, locale?: string, options?: DateTimeFormatOptions,) {
@@ -123,10 +124,10 @@ export function luxonDateTimeToLocale(dateTime: DateTime | null, locale?: string
         return '';
     }
 
-    locale = locale ?? i18n.language;
-    options = options ?? DateTime.DATE_MED;
+    locale = DISPLAY_LOCALE;
+    options = options ?? DateTime.DATE_SHORT;
 
-    return dateTime.toLocaleString(options, { locale: locale });
+    return dateTime.toLocaleString({ ...options, year: 'numeric', month: '2-digit', day: '2-digit' }, { locale: locale });
 }
 
 export function dateToLocale(dateTime: Date | null, locale?: string, options?: Intl.DateTimeFormatOptions) {
@@ -135,15 +136,15 @@ export function dateToLocale(dateTime: Date | null, locale?: string, options?: I
         return '';
     }
 
-    locale = locale ?? i18n.language;
+    locale = DISPLAY_LOCALE;
     options = options ?? {
-        year: '2-digit',
+        year: 'numeric',
         month: '2-digit',
         day: '2-digit',
     };
 
 
-    return dateTime.toLocaleString(locale ? [locale] : [], options);
+    return dateTime.toLocaleString(locale ? [locale] : [], { ...options, year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
 /*

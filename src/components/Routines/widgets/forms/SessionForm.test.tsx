@@ -126,15 +126,15 @@ describe('SessionForm', () => {
         // Arrange
         const date = DateTime.now();
         const formattedDate = new Date().toLocaleDateString(
-            'en-us',
+            'en-AU',
             { year: 'numeric', month: '2-digit', day: '2-digit' }
         );
 
         const timeStart = DateTime.now().set({ hour: 10, minute: 30 });
-        const timeStartFormatted = timeStart.toLocaleString(DateTime.TIME_SIMPLE, { locale: 'en-us' });
+        const timeStartFormatted = timeStart.toLocaleString(DateTime.TIME_SIMPLE, { locale: 'en-AU' });
 
         const timeEnd = DateTime.now().set({ hour: 11, minute: 0 });
-        const timeEndFormatted = timeEnd.toLocaleString(DateTime.TIME_SIMPLE, { locale: 'en-us' });
+        const timeEndFormatted = timeEnd.toLocaleString(DateTime.TIME_SIMPLE, { locale: 'en-AU' });
 
         const mockSession = new WorkoutSession({
             id: 'bbbbbbbb-bbbb-bbbb-bbbb-000000000001',
