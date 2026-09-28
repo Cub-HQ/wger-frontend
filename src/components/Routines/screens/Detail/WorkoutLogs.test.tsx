@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { WorkoutLogs } from "@/components/Routines/screens/Detail/WorkoutLogs";
 import {
     useDeleteRoutineLogQuery,
@@ -86,8 +86,7 @@ describe("Test the RoutineLogs component", () => {
         // All fixture logs belong to the squats entry of the routine's only day, so they
         // must end up in its table. The cell values themselves can't be asserted here:
         // the DataGrid virtualises them and happy-dom reports no dimensions.
-        expect(screen.getByRole('grid')).toBeInTheDocument();
-        expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(testRoutineLogData[0].logs.length);
+        expect(within(screen.getByRole('grid')).getAllByRole('button', { name: /delete/i })).toHaveLength(testRoutineLogData[0].logs.length);
     });
 
     test('shows the error when the logs could not be loaded', () => {
@@ -222,6 +221,6 @@ describe("Test the RoutineLogs component", () => {
         expect(screen.queryByText('Every day is leg day 🦵🏻')).not.toBeInTheDocument();
         expect(screen.getByText('routines.otherLoggedExercises')).toBeInTheDocument();
         expect(screen.getByText('Squats')).toBeInTheDocument();
-        expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(testRoutineLogData[0].logs.length);
+        expect(within(screen.getByRole('grid')).getAllByRole('button', { name: /delete/i })).toHaveLength(testRoutineLogData[0].logs.length);
     });
 });
