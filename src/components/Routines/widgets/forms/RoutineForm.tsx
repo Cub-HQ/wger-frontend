@@ -162,7 +162,7 @@ export const RoutineForm = ({
                             />
                         </Grid>
                         <Grid size={{ xs: 6 }}>
-                            <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                            <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                                 <DatePicker
                                     defaultValue={DateTime.now()}
                                     label={t('start')}
@@ -185,7 +185,7 @@ export const RoutineForm = ({
                             </LocalizationProvider>
                         </Grid>
                         <Grid size={{ xs: 5 }}>
-                            <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                            <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                                 <DatePicker
                                     defaultValue={DateTime.now()}
                                     label={t('end')}

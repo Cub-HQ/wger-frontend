@@ -1,4 +1,5 @@
-import { dateTimeToHHMM, dateToRelative, dateToYYYYMMDD, yyyymmddToDate } from "@/core/lib/date";
+import { dateTimeToHHMM, dateTimeToLocale, dateToLocale, dateToRelative, dateToYYYYMMDD, luxonDateTimeToLocale, yyyymmddToDate } from "@/core/lib/date";
+import { DateTime } from "luxon";
 
 /*
  * All date helpers must behave the same in every timezone, so the whole suite
@@ -33,6 +34,21 @@ describe.each([
     });
 
     describe("test date utility", () => {
+
+        test('every shared display helper uses Australian DD/MM/YYYY', () => {
+            const date = new Date(2026, 8, 21, 15, 24);
+            expect(dateToLocale(date)).toBe('21/09/2026');
+            expect(dateTimeToLocale(date).startsWith('21/09/2026')).toBe(true);
+            expect(dateToLocale(date, 'en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })).toBe('21/09/2026');
+            expect(luxonDateTimeToLocale(DateTime.fromJSDate(date))).toBe('21/09/2026');
+            const early = new Date(2026, 0, 5, 15, 24);
+            expect(dateToLocale(early, 'en-US', { month: '2-digit', day: '2-digit' })).toBe('05/01/2026');
+            expect(dateToLocale(early, 'en-US', { year: '2-digit', month: 'long', day: 'numeric' })).toBe('05/01/2026');
+            expect(dateTimeToLocale(early, 'en-US', { year: '2-digit', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).startsWith('05/01/2026, ')).toBe(true);
+            expect(luxonDateTimeToLocale(DateTime.fromJSDate(early))).toBe('05/01/2026');
+            expect(luxonDateTimeToLocale(DateTime.fromJSDate(early), 'en-US', DateTime.DATETIME_SHORT).startsWith('05/01/2026, ')).toBe(true);
+            expect(dateToYYYYMMDD(early)).toBe('2026-01-05');
+        });
 
         test('convert date 1', () => {
             const result = dateToYYYYMMDD(new Date(2022, 0, 1, 23));
