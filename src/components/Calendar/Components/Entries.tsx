@@ -15,6 +15,10 @@ import {
 import React from 'react';
 import { useTranslation } from "react-i18next";
 import type { DayProps } from "./CalendarComponent";
+import { SetSummary } from "@/components/Routines/widgets/WaveOne";
+import { useSessionsQuery } from "@/components/Routines";
+import EditIcon from "@mui/icons-material/Edit";
+import { Button, Stack } from "@mui/material";
 
 interface LogProps {
     selectedDay: DayProps;
@@ -23,6 +27,8 @@ interface LogProps {
 
 const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
     const [t] = useTranslation();
+    const lang = document.documentElement.lang || "en";
+    const allSessions = useSessionsQuery();
     const displayWeightUnit = useDisplayWeightUnit();
     // Entries without their own unit fall back to the one of the category
     const categoryUnit = useBodyWeightCategoryQuery().data?.unit ?? 'kg';
@@ -136,11 +142,14 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                             <List sx={{ pl: 4, pt: 0 }}>
                                 {session.logs.map((log) => (
                                     <ListItem key={log.id} dense>
-                                        <ListItemText
-                                            primary={log.exerciseObj?.getTranslation().name}
-                                            secondary={`${log.repetitions} × ${log.weight} `}
-                                        />
+                                        <ListItemText primary={log.exerciseObj?.getTranslation().name} secondary={<SetSummary log={log} sessions={allSessions.data ?? []} />} />
                                     </ListItem>))}
+                                <ListItem>
+                                    <Stack direction="row" spacing={1}>
+                                        <Button href={`/${lang}/routine/session/${session.id}`}>View workout</Button>
+                                        <Button href={`/${lang}/routine/session/${session.id}#edit`} startIcon={<EditIcon />}>Edit sets</Button>
+                                    </Stack>
+                                </ListItem>
                             </List>
                         </Collapse>
                     </React.Fragment>)}
