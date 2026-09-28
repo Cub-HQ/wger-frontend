@@ -195,12 +195,12 @@ export const PlanForm = ({ plan, closeFn }: PlanFormProps) => {
                 </form.AppField>
                 <Grid container spacing={1}>
                     <Grid size={6}>
-                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                             <form.Field name="start">
                                 {field => {
                                     const error = fieldError(field);
                                     return <DatePicker
-                                        format="yyyy-MM-dd"
+                                        format="dd/MM/yyyy"
                                         label={t('start')}
                                         value={startDateValue}
                                         slotProps={{
@@ -224,12 +224,12 @@ export const PlanForm = ({ plan, closeFn }: PlanFormProps) => {
                     </Grid>
 
                     <Grid size={6}>
-                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                             <form.Field name="end">
                                 {field => {
                                     const error = fieldError(field);
                                     return <DatePicker
-                                        format="yyyy-MM-dd"
+                                        format="dd/MM/yyyy"
                                         label={t('end')}
                                         value={endDateValue}
                                         slotProps={{

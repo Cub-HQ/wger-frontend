@@ -171,7 +171,7 @@ export const RoutineForm = ({
                     </form.AppField>
                 </Grid>
                 <Grid size={{ xs: 6 }}>
-                    <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                    <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                         <form.Field name="start">
                             {field => {
                                 const error = fieldError(field);
@@ -199,7 +199,7 @@ export const RoutineForm = ({
                     </LocalizationProvider>
                 </Grid>
                 <Grid size={{ xs: 5 }}>
-                    <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                    <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                         <form.Field name="end">
                             {field => {
                                 const error = fieldError(field);

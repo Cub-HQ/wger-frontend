@@ -81,7 +81,7 @@ export const MealForm = ({ meal, planId, closeFn }: MealFormProps) => {
                     />}
                 </form.AppField>
 
-                <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                     <form.Field name="time">
                         {field => <TimePicker
                             label={t('timeOfDay')}

@@ -180,7 +180,7 @@ const SessionFormFields = (
         <form onSubmit={submitHandler(form)}>
             <Grid container spacing={2}>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                    <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                    <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                         <form.Field name="date">
                             {field => <DatePicker
                                 value={selectedDate}
@@ -233,7 +233,7 @@ const SessionFormFields = (
                     </List>
                 </Grid> : <>
                     <Grid size={{ xs: 6, sm: 3 }}>
-                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                             <form.Field name="start">
                                 {field => <TimePicker
                                     label={t('start')}
@@ -258,7 +258,7 @@ const SessionFormFields = (
                         </LocalizationProvider>
                     </Grid>
                     <Grid size={{ xs: 6, sm: 3 }}>
-                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                        <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                             <form.Field name="end">
                                 {field => <TimePicker
                                     label={t('end')}

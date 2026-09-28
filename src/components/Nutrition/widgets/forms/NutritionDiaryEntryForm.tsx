@@ -208,10 +208,10 @@ export const NutritionDiaryEntryForm = ({ planId, entry, mealId, meals, closeFn 
                         />
                     )}
                 />}
-                <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale={i18n.language}>
+                <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
 
                     <DateTimePicker
-                        format="yyyy-MM-dd HH:mm"
+                        format="dd/MM/yyyy HH:mm"
                         label={t('date')}
                         value={dateValue}
                         disableFuture={true}
