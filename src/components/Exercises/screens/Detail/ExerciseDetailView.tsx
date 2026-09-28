@@ -12,6 +12,7 @@ import { useCanContributeExercises } from "@/components/User";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { dateTimeToLocale } from "@/core/lib/date";
+import { ExerciseProgression } from "@/components/Routines/widgets/WaveOne";
 
 
 const TranslateExerciseBanner = ({ setEditMode }: { setEditMode: (mode: boolean) => void }) => {
@@ -181,6 +182,7 @@ export const ExerciseDetailView = ({
                     </Grid>
 
                 </Grid>
+                <ExerciseProgression exerciseId={exercise.id!} />
                 <PaddingBox />
             </Grid>
             <Grid

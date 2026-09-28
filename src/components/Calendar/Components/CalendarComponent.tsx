@@ -16,6 +16,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import { Box, Card, CardContent, CardHeader, useMediaQuery, useTheme } from '@mui/material';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import Entries from './Entries';
 
 export interface DayProps {
@@ -31,8 +32,14 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
     const [t] = useTranslation();
 
     const currentDate = useMemo(() => new Date(), []);
-    const [currentMonth, setCurrentMonth] = useState(currentDate.getMonth());
-    const [currentYear, setCurrentYear] = useState(currentDate.getFullYear());
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requestedDate = useMemo(() => {
+        const value = searchParams.get("date");
+        const parsed = value ? new Date(`${value}T12:00:00`) : currentDate;
+        return Number.isNaN(parsed.getTime()) ? currentDate : parsed;
+    }, [currentDate, searchParams]);
+    const [currentMonth, setCurrentMonth] = useState(requestedDate.getMonth());
+    const [currentYear, setCurrentYear] = useState(requestedDate.getFullYear());
 
     const startOfMonth = new Date(currentYear, currentMonth, 1);
     const startOfNextMonth = new Date(currentYear, currentMonth + 1, 1);
@@ -72,7 +79,7 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
     const isSuccess = weightsQuery.isSuccess && sessionQuery.isSuccess && categoryQuery.isSuccess && measurementQuery.isSuccess && nutritionDiaryQuery.isSuccess;
 
     const defaultDay: DayProps = {
-        date: currentDate,
+        date: requestedDate,
         weightEntry: undefined,
         workoutSessions: [],
         measurements: [],
@@ -146,19 +153,19 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
 
         return result;
     }, [currentYear, currentMonth, weightsQuery.data, sessionQuery.data, categoryQuery.data, measurementQuery.data, nutritionDiaryQuery.data, t]);
-    const [selectedDay, setSelectedDay] = useState<DayProps>(days.find(day => isSameDay(day.date, currentDate)) || defaultDay);
+    const [selectedDay, setSelectedDay] = useState<DayProps>(days.find(day => isSameDay(day.date, requestedDate)) || defaultDay);
 
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     useEffect(() => {
         if (isSuccess) {
-            const todayWithData = days.find(day => isSameDay(day.date, currentDate));
-            if (todayWithData) {
-                setSelectedDay(todayWithData);
+            const requestedDay = days.find(day => isSameDay(day.date, requestedDate));
+            if (requestedDay) {
+                setSelectedDay(requestedDay);
             }
         }
-    }, [currentDate, days, isSuccess]);
+    }, [days, isSuccess, requestedDate]);
 
 
     useEffect(() => {
@@ -168,6 +175,8 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
 
     const handleDayClick = (day: DayProps) => {
         setSelectedDay(day);
+        const localDate = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
+        setSearchParams({ date: localDate }, { replace: true });
     };
 
     const handlePrevMonth = () => {
