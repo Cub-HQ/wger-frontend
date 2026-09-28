@@ -41,7 +41,7 @@ import { dateToLocale } from "@/core/lib/date";
 import { filterProgressionChartData } from "@/components/Routines/widgets/progressionChartRange";
 
 
-export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logEntries: WorkoutLog[] | undefined, chartEntries?: WorkoutLog[], displayDate?: Date, displayDates?: Map<string, Date> }) => {
+export const ExerciseLog = (props: { exercise: Exercise, routineId: number | null, logEntries: WorkoutLog[] | undefined, chartEntries?: WorkoutLog[], displayDate?: Date, displayDates?: Map<string, Date> }) => {
     const { t } = useTranslation();
     const logEntries = props.logEntries ?? [];
     const deleteLogQuery = useDeleteRoutineLogQuery(props.routineId);
