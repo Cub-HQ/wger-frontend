@@ -13,6 +13,9 @@ import {
     getRoutinesShallow,
     getRoutineStatisticsData,
     getRoutineStructure,
+    confirmRoutineImport,
+    downloadRoutineSpreadsheet,
+    previewRoutineImport,
 } from "@/components/Routines/api/routine";
 import { getRoutineRepUnits, getRoutineWeightUnits } from "@/components/Routines/api/workoutUnits";
 import { Day } from "@/components/Routines/models/Day";
@@ -439,5 +442,60 @@ describe("workout routine service tests", () => {
         expect(result).toBeInstanceOf(RoutineStatsData);
         expect(result.sets.mesocycle.exercises[9]).toBe(5);
         expect(result.sets.mesocycle.total).toBe(5);
+    });
+});
+
+describe("routine spreadsheet import/export", () => {
+    const file = new File(['routine_name\n'], 'plan.csv', { type: 'text/csv' });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        URL.createObjectURL = vi.fn(() => 'blob://file');
+        URL.revokeObjectURL = vi.fn();
+    });
+
+    test('downloads use ?file=, never ?format= (reserved by DRF)', async () => {
+        (axios.get as Mock).mockResolvedValue({ data: new Blob(['x']) });
+        const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+        await downloadRoutineSpreadsheet('xlsx', 7);
+        await downloadRoutineSpreadsheet('csv');
+
+        const [[exportUrl, exportConfig], [templateUrl]] = (axios.get as Mock).mock.calls;
+        expect(exportUrl).toMatch(/\/api\/v2\/routine\/7\/export\/\?file=xlsx$/);
+        expect(exportConfig).toMatchObject({ responseType: 'blob', headers: expect.objectContaining({ Authorization: expect.any(String) }) });
+        expect(templateUrl).toMatch(/\/api\/v2\/routine\/import-template\/\?file=csv$/);
+        expect(click).toHaveBeenCalledTimes(2);
+    });
+
+    test('create preview sends file, mode and drop_unsupported but no routine or plan_hash', async () => {
+        (axios.post as Mock).mockResolvedValue({ data: { ok: true } });
+
+        await previewRoutineImport({ file, mode: 'create', routineId: null, dropUnsupported: true });
+
+        const [url, form, config] = (axios.post as Mock).mock.calls[0];
+        expect(url).toMatch(/\/api\/v2\/routine\/import-preview\/$/);
+        expect(config.headers['Content-Type']).toBe('multipart/form-data');
+        const data = form as FormData;
+        expect(data.get('file')).toBe(file);
+        expect(data.get('mode')).toBe('create');
+        expect(data.get('drop_unsupported')).toBe('true');
+        expect(data.has('routine')).toBe(false);
+        expect(data.has('plan_hash')).toBe(false);
+    });
+
+    test('update confirm sends the target routine and the previewed plan_hash', async () => {
+        (axios.post as Mock).mockResolvedValue({ data: { id: 5, plan_hash: 'abc' } });
+
+        const result = await confirmRoutineImport({ file, mode: 'update', routineId: 5, dropUnsupported: false }, 'abc');
+
+        const [url, form] = (axios.post as Mock).mock.calls[0];
+        expect(url).toMatch(/\/api\/v2\/routine\/import-confirm\/$/);
+        const data = form as FormData;
+        expect(data.get('mode')).toBe('update');
+        expect(data.get('routine')).toBe('5');
+        expect(data.get('drop_unsupported')).toBe('false');
+        expect(data.get('plan_hash')).toBe('abc');
+        expect(result.id).toBe(5);
     });
 });
