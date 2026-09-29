@@ -4,7 +4,7 @@ import { Exercise } from "@/components/Exercises/models/exercise";
 import { SetConfigData } from "@/components/Routines/models/SetConfigData";
 import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
-import { SessionDetail } from "@/components/Routines/widgets/WaveOne";
+import { SessionDetail, SessionSummary } from "@/components/Routines/widgets/WaveOne";
 import { testExerciseBenchPress, testExerciseSquats } from "@/tests/exerciseTestdata";
 import { testRepUnitRepetitions, testWeightUnitKg } from "@/tests/unitsTestData";
 import { testWorkoutLogs, testWorkoutSession } from "@/tests/workoutLogsRoutinesTestData";
@@ -70,12 +70,12 @@ beforeEach(() => {
     routine.config = null;
 });
 
-describe('SessionDetail', () => {
+describe('SessionSummary', () => {
     test('Groups the recorded sets under their exercise, next to the target and last time', () => {
         // The routine asks for 4 × 8; what was done is shown as it was recorded
         routine.config = new SetConfigData({ exerciseId: bench.id!, slotEntryId: 20, type: 'normal', nrOfSets: 4, repetitions: 8, repetitionsUnitId: 1, repetitionsUnit: testRepUnitRepetitions, repetitionsRounding: null, weightUnitId: 1, weightRounding: null, restTime: 90, textRepr: '', comment: '' });
-        sessions.current = { isLoading: false, data: summarySessions() };
-        render(page('current'));
+        const all = summarySessions();
+        render(<SessionSummary session={all[1]} sessions={all} />);
 
         const benchCard = screen.getByRole('region', { name: 'Benchpress' });
         expect(benchCard.querySelector('img')).toHaveAttribute('src', '/media/bench.jpg');
@@ -97,11 +97,23 @@ describe('SessionDetail', () => {
 
     test('A workout without a routine shows no target', () => {
         const quick = new WorkoutSession({ ...testWorkoutSession, id: 'quick', routineId: null as unknown as number, logs: [set('quick', testExerciseSquats, 1, 5, 100)] });
-        sessions.current = { isLoading: false, data: [quick] };
-        render(page('quick'));
+        render(<SessionSummary session={quick} sessions={[quick]} />);
 
         expect(routine.requested.every(([, enabled]) => enabled === false)).toBe(true);
         expect(within(screen.getByRole('region', { name: 'Squats' })).queryByText(/Target/)).toBeNull();
+    });
+});
+
+describe('SessionDetail', () => {
+    // The read-only summary lives on the calendar; this page is for logging and editing
+    test('Shows the set editor without a second, read-only summary', () => {
+        sessions.current = { isLoading: false, data: summarySessions() };
+        render(page('current'));
+
+        expect(screen.queryByRole('region')).toBeNull();
+        expect(screen.queryByText(/vs last time/)).toBeNull();
+        expect(screen.getAllByText('sets')).toHaveLength(2);
+        expect(screen.getByRole('link', { name: 'Edit workout sets' })).toHaveAttribute('href', '#edit');
     });
 
     // An "Edit sets" link opens the page on #edit, but the editor only renders once the sessions have loaded

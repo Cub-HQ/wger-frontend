@@ -6,7 +6,12 @@ import {
 import { getNutritionalDiaryEntries } from "@/components/Nutrition/api/nutritionalDiary";
 import { getSessions } from "@/components/Routines/api/session";
 import { deleteSession } from "@/components/Routines/api/sessionRecovery";
-import { WorkoutSession } from "@/components/Routines";
+import { getRoutine } from "@/components/Routines/api/routine";
+import { Exercise } from "@/components/Exercises/models/exercise";
+import { ExerciseImage } from "@/components/Exercises/models/image";
+import { Routine, SetConfigData, WorkoutLog, WorkoutSession } from "@/components/Routines";
+import { testExerciseBenchPress, testExerciseSquats } from "@/tests/exerciseTestdata";
+import { testRepUnitRepetitions, testWeightUnitKg } from "@/tests/unitsTestData";
 import { getBodyWeightCategory, getWeights } from "@/components/Measurements/api/bodyWeight";
 import { TEST_DIARY_ENTRY_1, TEST_DIARY_ENTRY_2 } from "@/tests/nutritionDiaryTestdata";
 import { testQueryClient } from "@/tests/queryClient";
@@ -31,6 +36,11 @@ vi.mock("@/components/Measurements/api/measurements");
 vi.mock("@/components/Nutrition/api/nutritionalDiary");
 vi.mock("@/components/Routines/api/session");
 vi.mock("@/components/Routines/api/sessionRecovery");
+vi.mock("@/components/Routines/api/routine");
+vi.mock("@/components/Routines/api/workoutUnits", () => ({
+    getRoutineRepUnits: () => Promise.resolve([testRepUnitRepetitions]),
+    getRoutineWeightUnits: () => Promise.resolve([testWeightUnitKg]),
+}));
 vi.mock("@/components/Measurements/api/bodyWeight");
 vi.mock('@/components/User/queries/profile', () => ({
     useProfileQuery: () => ({ isLoading: false, data: { useMetric: true } }),
@@ -251,6 +261,76 @@ describe('CalendarComponent', () => {
         });
         expect(getNutritionalDiaryEntries).toHaveBeenCalledWith({
             filtersetQuery: { "datetime__gte": start, "datetime__lt": end },
+        });
+    });
+
+    describe('expanding a logged workout', () => {
+        const bench = new Exercise({ ...testExerciseBenchPress, images: [new ExerciseImage(1, 'image', '/media/bench.jpg', true)] } as unknown as ConstructorParameters<typeof Exercise>[0]);
+        const set = (sessionId: string, exercise: Exercise, iteration: number, repetitions: number, weight: number) => new WorkoutLog({
+            id: `${sessionId}-${exercise.id}-${iteration}`,
+            date: new Date(currentYear, currentMonth, 10),
+            iteration,
+            exerciseId: exercise.id!,
+            exercise,
+            slotEntryId: exercise.id! * 10,
+            sessionId,
+            routineId: 3,
+            repetitions,
+            repetitionsUnit: testRepUnitRepetitions,
+            weight,
+            weightUnit: testWeightUnitKg,
+            rir: null,
+        });
+
+        test('shows one card per exercise with its actions above the sets', async () => {
+            const previous = WorkoutSession.clone(testWorkoutSession, { id: 'previous', datetimeStart: new Date(currentYear, currentMonth, 3, 10) });
+            previous.logs = [set('previous', bench, 1, 6, 76.5), set('previous', bench, 2, 6, 50)];
+            const current = WorkoutSession.clone(testWorkoutSession, { id: 'current', datetimeStart: new Date(currentYear, currentMonth, 10, 10, 30) });
+            // Interleaved and out of order, as the API may return them
+            current.logs = [
+                set('current', bench, 2, 6, 50),
+                set('current', testExerciseSquats, 1, 8, 40),
+                set('current', bench, 1, 6, 50),
+                set('current', testExerciseSquats, 2, 8, 40),
+                set('current', bench, 3, 5, 55),
+            ];
+            (getSessions as Mock).mockImplementation(() => Promise.resolve([previous, current]));
+            // The routine asks for 4 × 8 on the bench, nothing for the squats
+            const config = new SetConfigData({ exerciseId: bench.id!, slotEntryId: 20, type: 'normal', nrOfSets: 4, repetitions: 8, repetitionsUnitId: 1, repetitionsUnit: testRepUnitRepetitions, repetitionsRounding: null, weightUnitId: 1, weightRounding: null, restTime: 90, textRepr: '', comment: '' });
+            (getRoutine as Mock).mockResolvedValue({ getSetConfigData: (_day: number, _iteration: number, slotEntry: number) => slotEntry === bench.id! * 10 ? config : null } as unknown as Routine);
+
+            renderComponent();
+            await user.click(await screen.findByTestId(`day-${dateToYYYYMMDD(current.datetimeStart)}`));
+            await user.click(await screen.findByText('routines.workoutSession'));
+
+            const benchCard = await screen.findByRole('region', { name: 'Benchpress' });
+            const squatCard = screen.getByRole('region', { name: 'Squats' });
+            // Each exercise is named once, however many sets it had
+            expect(screen.getAllByRole('heading', { name: 'Benchpress' })).toHaveLength(1);
+            expect(screen.getAllByRole('heading', { name: 'Squats' })).toHaveLength(1);
+            expect(benchCard.querySelector('img')).toHaveAttribute('src', '/media/bench.jpg');
+            expect(await within(benchCard).findByText('Target: 4 sets × 8, 90s rest between sets')).toBeInTheDocument();
+            expect(within(squatCard).queryByText(/Target/)).toBeNull();
+
+            // What was done, in set order, each held against the same set last time
+            expect(within(benchCard).getAllByRole('listitem').map(row => row.textContent)).toEqual([
+                'Set 16 reps × 50 kg▼ -26.5 kg vs last time',
+                'Set 26 reps × 50 kg',
+                'Set 35 reps × 55 kg▲ +5 kg vs last time',
+            ]);
+            expect(within(squatCard).getAllByRole('listitem').map(row => row.textContent)).toEqual([
+                'Set 18 reps × 40 kg',
+                'Set 28 reps × 40 kg',
+            ]);
+
+            // The actions come before the first set, not after the last one
+            for (const action of [
+                screen.getByRole('link', { name: 'View workout' }),
+                screen.getByRole('link', { name: 'Edit sets' }),
+                screen.getByRole('button', { name: 'Delete workout' }),
+            ]) {
+                expect(action.compareDocumentPosition(benchCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            }
         });
     });
 

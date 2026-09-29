@@ -71,7 +71,8 @@ export const SetSummary = ({ log, sessions }: { log: WorkoutLog, sessions: Worko
         ? { value: loadDelta, unit: weightUnit }
         : measureDelta !== null && measureDelta !== 0 ? { value: measureDelta, unit: repetitionUnit || "reps" } : null;
     const up = delta !== null && delta.value > 0;
-    return <Stack direction={{ xs: "column", sm: "row" }} spacing={0.75} sx={{ alignItems: { sm: "center" } }}>
+    // Wraps by the width it gets, which in the calendar is a narrow side panel on any screen
+    return <Stack direction="row" useFlexGap spacing={0.75} sx={{ flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
         <Typography component="span">{metrics.length ? metrics.join(" · ") : "No recorded metrics"}</Typography>
         {delta && <Chip size="small" color={up ? "success" : "error"} label={`${up ? "▲" : "▼"} ${delta.value > 0 ? "+" : ""}${number(delta.value)}${delta.unit ? ` ${delta.unit}` : ""} vs last time`} />}
     </Stack>;
@@ -141,12 +142,12 @@ const ExerciseSummary = ({ logs, sessions, target }: { logs: WorkoutLog[], sessi
             <Stack direction="row" spacing={2} sx={{ alignItems: "center", mb: 1.5 }}>
                 {exercise?.mainImage && <Box component="img" src={exercise.mainImage.url} alt="" sx={{ width: 64, height: 64, objectFit: "cover", borderRadius: 1, flexShrink: 0 }} />}
                 <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="h6" component="h2">{name}</Typography>
+                    <Typography variant="h6" component="h2" sx={{ overflowWrap: "anywhere" }}>{name}</Typography>
                     {target && <Typography variant="body2" color="text.secondary">Target: {target}</Typography>}
                 </Box>
             </Stack>
             <Stack component="ol" spacing={1} sx={{ listStyle: "none", p: 0, m: 0 }}>
-                {logs.map((log, index) => <Stack component="li" key={log.id} direction="row" spacing={2} sx={{ alignItems: { sm: "center" } }}>
+                {logs.map((log, index) => <Stack component="li" key={log.id} direction="row" spacing={2} sx={{ alignItems: "center" }}>
                     <Typography color="text.secondary" sx={{ minWidth: 48, flexShrink: 0 }}>Set {index + 1}</Typography>
                     <SetSummary log={log} sessions={sessions} />
                 </Stack>)}
@@ -155,13 +156,30 @@ const ExerciseSummary = ({ logs, sessions, target }: { logs: WorkoutLog[], sessi
     </Card>;
 };
 
+// A logged session as one card per exercise, for the calendar's expanded workout
+export const SessionSummary = ({ session, sessions }: { session: WorkoutSession, sessions: WorkoutSession[] }) => {
+    // Quick logs have no routine, so there is nothing they were prescribed
+    const routineQuery = useRoutineDetailQuery(session.routineId ?? 0, Boolean(session.routineId));
+    const grouped = new Map<number, WorkoutLog[]>();
+    session.logs.forEach(log => grouped.set(log.exerciseId, [...(grouped.get(log.exerciseId) ?? []), log]));
+    // Same order SetSummary pairs the sets with the previous session in
+    const exercises = Array.from(grouped.values(), logs => [...logs].sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0)));
+    const targetOf = (logs: WorkoutLog[]) => {
+        const planned = logs.find(log => log.slotEntryId !== null && log.iteration !== null);
+        const config = planned && routineQuery.data?.getSetConfigData(session.dayId, planned.iteration!, planned.slotEntryId!);
+        return config ? prescription(config) : null;
+    };
+    return <Stack spacing={2}>
+        {exercises.map(logs => <ExerciseSummary key={logs[0].exerciseId} logs={logs} sessions={sessions} target={targetOf(logs)} />)}
+        {exercises.length === 0 && <Typography color="text.secondary">No sets were recorded in this workout.</Typography>}
+    </Stack>;
+};
+
 export const SessionDetail = () => {
     const { sessionId = "" } = useParams();
     const sessionsQuery = useSessionsQuery();
     const queryClient = useQueryClient();
     const session = sessionsQuery.data?.find(item => item.id === sessionId);
-    // Quick logs have no routine, so there is nothing they were prescribed
-    const routineQuery = useRoutineDetailQuery(session?.routineId ?? 0, Boolean(session?.routineId));
     const [adding, setAdding] = useState(false);
     // Edit sets links land on #edit, which only exists once the sessions have loaded
     const { hash } = useLocation();
@@ -174,13 +192,6 @@ export const SessionDetail = () => {
     if (!session) return <Typography color="error">Workout session not found.</Typography>;
     const grouped = new Map<number, WorkoutLog[]>();
     session.logs.forEach(log => grouped.set(log.exerciseId, [...(grouped.get(log.exerciseId) ?? []), log]));
-    // Same order SetSummary pairs the sets with the previous session in
-    const exercises = Array.from(grouped.values(), logs => [...logs].sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0)));
-    const targetOf = (logs: WorkoutLog[]) => {
-        const planned = logs.find(log => log.slotEntryId !== null && log.iteration !== null);
-        const config = planned && routineQuery.data?.getSetConfigData(session.dayId, planned.iteration!, planned.slotEntryId!);
-        return config ? prescription(config) : null;
-    };
     const addSet = async (last: WorkoutLog) => {
         setAdding(true);
         try {
@@ -192,16 +203,11 @@ export const SessionDetail = () => {
         <Typography variant="h4">{sessionName(session)}</Typography>
         <Typography color="text.secondary" sx={{ mb: 2 }}>{dateToLocale(session.datetimeStart)} · stable session {session.id}</Typography>
         <SessionTimer session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
+        <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
         <Button startIcon={<EditIcon />} href="#edit" variant="contained" sx={{ mb: 2 }}>Edit workout sets</Button>
-        <Stack spacing={2} sx={{ mb: 3 }}>
-            {exercises.map(logs => <ExerciseSummary key={logs[0].exerciseId} logs={logs} sessions={sessionsQuery.data ?? []} target={targetOf(logs)} />)}
-            {exercises.length === 0 && <Typography color="text.secondary">No sets were recorded in this workout.</Typography>}
-        </Stack>
         <Divider />
-        <Box id="edit" ref={editRef} sx={{ pt: 2 }}>
-            <Typography variant="h5" component="h2" sx={{ mb: 1 }}>Edit sets</Typography>
-            <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
-            {exercises.map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
+        <Box id="edit" ref={editRef}>
+            {Array.from(grouped.values()).map(logs => <Box key={logs[0].exerciseId} sx={{ mb: 3 }}>
                 <ExerciseDemoLink exercise={logs[0].exerciseObj!} />
                 <ExerciseLog
                     exercise={logs[0].exerciseObj!}

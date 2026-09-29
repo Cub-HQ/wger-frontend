@@ -124,8 +124,9 @@ describe('Entries Component', () => {
         const user = userEvent.setup();
         await user.click(screen.getByText('routines.workoutSession'));
 
-        // The logs are rendered as "repetitions × weight" per exercise
-        expect(screen.getAllByText('Squats').length).toBe(testWorkoutLogs.length);
+        // One card for the exercise, its sets numbered underneath as "repetitions × weight"
+        expect(screen.getAllByText('Squats')).toHaveLength(1);
+        expect(screen.getByRole('region', { name: 'Squats' })).toBeInTheDocument();
         expect(screen.getByText(/^8 reps × 80 kg/)).toBeInTheDocument();
         expect(screen.getByText(/^8 reps × 82.5 kg/)).toBeInTheDocument();
     });
