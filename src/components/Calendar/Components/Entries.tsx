@@ -26,13 +26,15 @@ import type { DayProps } from "./CalendarComponent";
 import { SessionSummary, useDeleteSessionQuery, useSessionsQuery, WorkoutSession } from "@/components/Routines";
 import EditIcon from "@mui/icons-material/Edit";
 import { makeLink, WgerLink } from "@/core/lib/url";
+import { EnduranceItem } from "./EnduranceItem";
 
 interface LogProps {
     selectedDay: DayProps;
     isStandalone?: boolean;
+    enduranceError?: boolean;
 }
 
-const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
+const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone, enduranceError }) => {
     // <html lang> is empty on the gym, i18next is what knows the page language
     const [t, i18n] = useTranslation();
     const allSessions = useSessionsQuery();
@@ -110,6 +112,7 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                 gap: 2
             }}>
                 {message && <Alert severity="success" role="status">{message}</Alert>}
+                {enduranceError && <Alert severity="warning">Could not load rides and runs from Intervals.icu.</Alert>}
                 <List>
                     {/* Weight entries */}
                     {selectedDay.weightEntry &&
@@ -191,6 +194,14 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                             </Stack>
                         </Collapse>
                     </React.Fragment>)}
+
+                    {/* Intervals.icu rides, runs and swims, read-only */}
+                    {selectedDay.enduranceEntries.length > 0 && <>
+                        <ListItem>
+                            <ListItemText primary="Endurance (Intervals.icu)" secondary="Read-only, edit in Intervals.icu" sx={{ pl: 2 }} />
+                        </ListItem>
+                        {selectedDay.enduranceEntries.map(entry => <EnduranceItem key={entry.id} entry={entry} />)}
+                    </>}
 
                     {/* Nutrition diary */}
                     {selectedDay.nutritionLogs.length > 0 && <>

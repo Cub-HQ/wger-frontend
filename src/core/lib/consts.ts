@@ -47,6 +47,8 @@ export enum QueryKey {
     PUBLIC_TEMPLATES = 'public-templates',
     ROUTINE_WEIGHT_UNITS = 'weight-units',
     ROUTINE_REP_UNITS = 'rep-units',
+    // Read-only Intervals.icu mirror (wger-gym#6)
+    ENDURANCE_ENTRIES = 'endurance-entries',
 
     // Nutrition
     NUTRITIONAL_PLANS = 'nutritional-plans',
@@ -113,6 +115,7 @@ export enum ApiPath {
     SLOT = 'slot',
     SLOT_ENTRY = 'slot-entry',
     SESSION = 'workoutsession',
+    ENDURANCE_ENTRY = 'endurance-entry',
 
     WORKOUT_LOG = 'workoutlog',
     PRIVATE_TEMPLATE = 'templates',
