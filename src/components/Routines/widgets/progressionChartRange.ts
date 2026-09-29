@@ -1,4 +1,5 @@
 export const PROGRESSION_CHART_RANGES = [
+    { value: "last6", label: "Last 6 sessions", sessions: 6 },
     { value: "1m", label: "1 month", months: 1 },
     { value: "3m", label: "3 months", months: 3 },
     { value: "6m", label: "6 months", months: 6 },
@@ -9,7 +10,7 @@ export const PROGRESSION_CHART_RANGES = [
 ] as const;
 export type ProgressionChartRange = typeof PROGRESSION_CHART_RANGES[number]["value"];
 const STORAGE_KEY = "wger.progressionChartRange";
-const DEFAULT_RANGE: ProgressionChartRange = "6m";
+const DEFAULT_RANGE: ProgressionChartRange = "last6";
 
 export const loadProgressionChartRange = (): ProgressionChartRange => {
     try {
@@ -55,18 +56,28 @@ export const mountProgressionChartRangeSetting = () => {
     content.prepend(card);
 };
 
-export const filterProgressionChartData = <T extends { date: Date }>(
+// A log without a session counts its day as the session
+export const sessionKey = (entry: { date: Date; sessionId: string | null }) => entry.sessionId ?? entry.date.toDateString();
+
+export const filterProgressionChartData = <T extends { date: Date; sessionId: string | null }>(
     data: T[],
     range: ProgressionChartRange = loadProgressionChartRange(),
     now: Date = new Date(),
 ): T[] => {
-    const months = PROGRESSION_CHART_RANGES.find(option => option.value === range)?.months;
-    if (months === null) return data;
-    if (months === undefined) return filterProgressionChartData(data, DEFAULT_RANGE, now);
+    const option = PROGRESSION_CHART_RANGES.find(item => item.value === range);
+    if (!option) return filterProgressionChartData(data, DEFAULT_RANGE, now);
+    if ("sessions" in option) {
+        // The newest N performed sessions however old, with every set they hold
+        const started = new Map<string, number>();
+        data.forEach(entry => started.set(sessionKey(entry), Math.max(started.get(sessionKey(entry)) ?? -Infinity, entry.date.getTime())));
+        const kept = new Set([...started].sort((a, b) => b[1] - a[1]).slice(0, option.sessions).map(([key]) => key));
+        return data.filter(entry => kept.has(sessionKey(entry)));
+    }
+    if (option.months === null) return data;
     const cutoff = new Date(now);
     const day = cutoff.getDate();
     cutoff.setDate(1);
-    cutoff.setMonth(cutoff.getMonth() - months);
+    cutoff.setMonth(cutoff.getMonth() - option.months);
     cutoff.setDate(Math.min(day, new Date(cutoff.getFullYear(), cutoff.getMonth() + 1, 0).getDate()));
     return data.filter(entry => entry.date >= cutoff && entry.date <= now);
 };

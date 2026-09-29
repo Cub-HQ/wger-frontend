@@ -4,7 +4,7 @@ import { Exercise } from "@/components/Exercises/models/exercise";
 import { SetConfigData } from "@/components/Routines/models/SetConfigData";
 import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
-import { SessionDetail, SessionSummary } from "@/components/Routines/widgets/WaveOne";
+import { ExerciseProgression, SessionDetail, SessionSummary } from "@/components/Routines/widgets/WaveOne";
 import { testExerciseBenchPress, testExerciseSquats } from "@/tests/exerciseTestdata";
 import { testRepUnitRepetitions, testWeightUnitKg } from "@/tests/unitsTestData";
 import { testWorkoutLogs, testWorkoutSession } from "@/tests/workoutLogsRoutinesTestData";
@@ -24,7 +24,7 @@ vi.mock('@/components/Routines/queries/units', () => ({
     useFetchRoutineRepUnitsQuery: () => ({ data: [] }),
     useFetchRoutineWeighUnitsQuery: () => ({ data: [] }),
 }));
-vi.mock('@/components/Routines/widgets/LogWidgets', () => ({ ExerciseLog: () => <div>sets</div>, TimeSeriesChart: () => null }));
+vi.mock('@/components/Routines/widgets/LogWidgets', () => ({ ExerciseLog: () => <div>sets</div>, TimeSeriesChart: ({ data }: { data: unknown[] }) => <div>chart of {data.length} sets</div> }));
 vi.mock('@/components/Routines/widgets/WaveThree', () => ({ ExerciseDemoLink: () => null, SessionMetadataEditor: () => null, SessionTimer: () => null }));
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 
@@ -155,5 +155,39 @@ describe('SessionDetail', () => {
 
         expect(screen.getAllByText('sets').length).toBeGreaterThan(0);
         expect(scrolled.map(element => element.id)).toEqual(['edit']);
+    });
+});
+
+describe('ExerciseProgression', () => {
+    const progression = (exerciseId: number) => <MemoryRouter initialEntries={['/en-au/exercise/1']}>
+        <Routes><Route path="/:lang/exercise/:id" element={<ExerciseProgression exerciseId={exerciseId} />} /></Routes>
+    </MemoryRouter>;
+    // Two workouts in January 2023 and a different exercise in the second
+    const oldHistory = () => {
+        const first = new WorkoutSession({ ...testWorkoutSession, id: 'jan-a', datetimeStart: new Date(2023, 0, 10, 9) });
+        first.logs = [1, 2, 3].map(i => set('jan-a', bench, i, 10, 20));
+        const second = new WorkoutSession({ ...testWorkoutSession, id: 'jan-b', datetimeStart: new Date(2023, 0, 17, 9) });
+        second.logs = [...[1, 2, 3].map(i => set('jan-b', bench, i, 10, 22.5)), set('jan-b', testExerciseSquats, 1, 5, 100)];
+        return [first, second];
+    };
+
+    test('Charts and lists every set of an exercise last trained in 2023', () => {
+        sessions.current = { isLoading: false, data: oldHistory() };
+        render(progression(bench.id!));
+
+        expect(screen.getByText('chart of 6 sets')).toBeInTheDocument();
+        expect(screen.queryByText(/No recorded sets/)).toBeNull();
+        const dates = screen.getAllByRole('link');
+        expect(dates).toHaveLength(6);
+        expect(dates[0]).toHaveTextContent('17/01/2023');
+        expect(dates[0]).toHaveAttribute('href', '/en-au/routine/session/jan-b');
+    });
+
+    test('Shows the empty state only when this exercise has no sets', () => {
+        sessions.current = { isLoading: false, data: oldHistory() };
+        render(progression(9999));
+
+        expect(screen.getByText('No recorded sets for this exercise yet.')).toBeInTheDocument();
+        expect(screen.queryByText(/chart of/)).toBeNull();
     });
 });

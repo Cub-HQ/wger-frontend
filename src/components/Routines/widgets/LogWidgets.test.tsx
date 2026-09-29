@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from "@testing-library/user-event";
 import { useDeleteRoutineLogQuery, useEditRoutineLogQuery } from '@/components/Routines/queries';
-import { ExerciseLog } from "@/components/Routines/widgets/LogWidgets";
+import { ExerciseLog, progressionSeries, TimeSeriesChart } from "@/components/Routines/widgets/LogWidgets";
 import { testExerciseBenchPress } from "@/tests/exerciseTestdata";
 import { testWorkoutLogs } from "@/tests/workoutLogsRoutinesTestData";
 import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
@@ -173,5 +173,117 @@ describe('ExerciseLog', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Distance');
         expect(mockEditMutate).not.toHaveBeenCalled();
         expect(screen.getByRole('menuitem', { name: /save/i })).toBeInTheDocument();
+    });
+});
+
+// sessionId, start, [repetitions, weight] per set; units default to repetitions and kg
+const workout = (sessionId: string, start: Date, sets: [number | null, number | null][], units: { rep?: number, weight?: number } = {}) =>
+    sets.map(([repetitions, weight], i) => new WorkoutLog({
+        id: `${sessionId}-${i}`,
+        date: start,
+        iteration: 1,
+        slotEntryId: null,
+        sessionId,
+        exerciseId: 1,
+        repetitions,
+        repetitionsUnitId: units.rep ?? 1,
+        weight,
+        weightUnitId: units.weight ?? 1,
+        rir: null,
+    }));
+
+const points = (data: WorkoutLog[], metric: 'weight' | 'reps') =>
+    progressionSeries(data, metric).series.map(([set, series]) => [set, series.map(point => point.value)]);
+
+describe('progressionSeries', () => {
+    test('A missing weight leaves a gap while a stored 0 kg is plotted', () => {
+        const data = workout('a', new Date(2026, 0, 1), [[10, 20], [10, null], [10, 0]]);
+
+        expect(points(data, 'weight')).toEqual([[1, [20]], [3, [0]]]);
+    });
+
+    test('Pounds become kilograms and body weight or plates are never charted as kg', () => {
+        const data = [
+            ...workout('lb', new Date(2026, 0, 1), [[10, 100]], { weight: 2 }),
+            ...workout('plates', new Date(2026, 0, 2), [[10, 4]], { weight: 3 }),
+            ...workout('kmh', new Date(2026, 0, 3), [[10, 12]], { weight: 5 }),
+        ];
+
+        expect(points(data, 'weight')).toEqual([[1, [45.359237]]]);
+        expect(points(data, 'reps')).toEqual([[1, [10, 10, 10]]]);
+    });
+
+    test('Seconds and repetitions never share the reps axis; the newest unit wins', () => {
+        const data = [
+            ...workout('reps', new Date(2026, 0, 1), [[12, 0], [10, 0]]),
+            ...workout('hold', new Date(2026, 0, 8), [[45, 0], [40, 0]], { rep: 3 }),
+        ];
+
+        const result = progressionSeries(data, 'reps');
+
+        expect(result.repUnit).toBe('s');
+        expect(result.mixedUnits).toBe(true);
+        expect(points(data, 'reps')).toEqual([[1, [45]], [2, [40]]]);
+        expect(result.ticks).toEqual([new Date(2026, 0, 8).getTime()]);
+    });
+
+    test('Two sessions on one day keep their own set numbers and dates', () => {
+        const data = [
+            ...workout('morning', new Date(2026, 0, 1, 7), [[5, 100], [5, 102.5]]),
+            ...workout('evening', new Date(2026, 0, 1, 18), [[8, 80]]),
+        ];
+
+        const result = progressionSeries(data, 'weight');
+
+        expect(points(data, 'weight')).toEqual([[1, [100, 80]], [2, [102.5]]]);
+        expect(result.ticks).toHaveLength(2);
+    });
+});
+
+describe('TimeSeriesChart', () => {
+    beforeEach(() => window.localStorage.clear());
+
+    test('Starts on kg when a load was lifted and can switch to reps', async () => {
+        const user = userEvent.setup();
+        render(<TimeSeriesChart data={workout('a', new Date(2023, 0, 10), [[8, 20], [8, null]])} />);
+
+        expect(screen.getByRole('button', { name: 'kg' })).toHaveAttribute('aria-pressed', 'true');
+        await user.click(screen.getByRole('button', { name: 'Reps' }));
+        expect(screen.getByRole('button', { name: 'Reps' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByText(/No .* recorded/)).not.toBeInTheDocument();
+    });
+
+    test('Starts on reps for body weight sets and explains an empty kg chart', async () => {
+        const user = userEvent.setup();
+        render(<TimeSeriesChart data={workout('a', new Date(2026, 0, 10), [[15, null], [12, 0]])} />);
+
+        expect(screen.getByRole('button', { name: 'Reps' })).toHaveAttribute('aria-pressed', 'true');
+        await user.click(screen.getByRole('button', { name: 'kg' }));
+        // The stored 0 kg set is a real point, so the kg chart is not empty
+        expect(screen.queryByText(/No kg recorded/)).not.toBeInTheDocument();
+    });
+
+    test('Explains a kg chart with no load at all', async () => {
+        const user = userEvent.setup();
+        render(<TimeSeriesChart data={workout('a', new Date(2026, 0, 10), [[15, null]])} />);
+
+        await user.click(screen.getByRole('button', { name: 'kg' }));
+        expect(screen.getByText('No kg recorded in the chart range (Last 6 sessions). Try Reps.')).toBeInTheDocument();
+    });
+
+    test('Points to the preference when the chosen range hides older workouts', () => {
+        window.localStorage.setItem("wger.progressionChartRange", "6m");
+        render(<TimeSeriesChart data={workout('a', new Date(2023, 0, 10), [[8, 20]])} />);
+
+        expect(screen.getByText(/No sets in the chart range \(6 months\)/)).toBeInTheDocument();
+    });
+
+    test('Says when only one repetition unit is shown', () => {
+        render(<TimeSeriesChart data={[
+            ...workout('reps', new Date(2026, 0, 1), [[12, null]]),
+            ...workout('hold', new Date(2026, 0, 8), [[45, null]], { rep: 3 }),
+        ]} />);
+
+        expect(screen.getByText('Only sets counted in s are shown; the others use a different unit.')).toBeInTheDocument();
     });
 });
