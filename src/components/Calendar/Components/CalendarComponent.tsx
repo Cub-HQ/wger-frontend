@@ -1,6 +1,8 @@
 import CalendarDayGrid from "@/components/Calendar/Components/CalendarDayGrid";
 import CalendarHeader from "@/components/Calendar/Components/CalendarHeader";
 import { CalendarMeasurement } from "@/components/Calendar/Helpers/CalendarMeasurement";
+import type { EnduranceEntry } from "@/components/Calendar/api/endurance";
+import { useEnduranceEntriesQuery } from "@/components/Calendar/queries/endurance";
 import {
     categoryDisplayName,
     MeasurementEntry,
@@ -10,7 +12,7 @@ import {
 } from "@/components/Measurements";
 import { DiaryEntry, useNutritionDiaryQuery } from "@/components/Nutrition";
 import { useSessionsQuery, WorkoutSession } from "@/components/Routines";
-import { isSameDay } from "@/core/lib/date";
+import { dateToYYYYMMDD, isSameDay } from "@/core/lib/date";
 import { LoadingPlaceholder } from "@/core/ui/LoadingWidget/LoadingWidget";
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import { Box, Card, CardContent, CardHeader, useMediaQuery, useTheme } from '@mui/material';
@@ -25,6 +27,7 @@ export interface DayProps {
     measurements: CalendarMeasurement[],
     nutritionLogs: DiaryEntry[],
     workoutSessions: WorkoutSession[],
+    enduranceEntries: EnduranceEntry[],
 }
 
 
@@ -74,7 +77,13 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
     const nutritionDiaryQuery = useNutritionDiaryQuery({
         filtersetQuery: monthWindow('datetime'),
     });
+    // Intervals rows carry the athlete-local day itself, so this window is days, not instants
+    const enduranceQuery = useEnduranceEntriesQuery({
+        from: dateToYYYYMMDD(startOfMonth),
+        to: dateToYYYYMMDD(new Date(currentYear, currentMonth + 1, 0)),
+    });
 
+    // Intervals rows join the days when they arrive; a slow or failed read never holds back the gym data
     const isLoading = weightsQuery.isLoading || sessionQuery.isLoading || categoryQuery.isLoading || measurementQuery.isLoading || nutritionDiaryQuery.isLoading;
     const isSuccess = weightsQuery.isSuccess && sessionQuery.isSuccess && categoryQuery.isSuccess && measurementQuery.isSuccess && nutritionDiaryQuery.isSuccess;
 
@@ -82,6 +91,7 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
         date: requestedDate,
         weightEntry: undefined,
         workoutSessions: [],
+        enduranceEntries: [],
         measurements: [],
         nutritionLogs: []
     };
@@ -122,7 +132,8 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
                 weightEntry: undefined,
                 measurements: [],
                 nutritionLogs: [],
-                workoutSessions: []
+                workoutSessions: [],
+                enduranceEntries: [],
             });
         }
 
@@ -132,6 +143,7 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
                 weightEntry: weightsQuery.data?.find(w => isSameDay(w.date, date)),
                 measurements: measurements.filter(m => isSameDay(m.date, date)) || [],
                 workoutSessions: sessionQuery.data?.filter(m => isSameDay(m.datetimeStart, date)) ?? [],
+                enduranceEntries: enduranceQuery.data?.filter(e => e.localDate === dateToYYYYMMDD(date)) ?? [],
                 nutritionLogs: nutritionDiaryQuery.data?.filter(m => isSameDay(m.datetime, date)) || [],
             });
             date.setDate(date.getDate() + 1);
@@ -146,13 +158,14 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
                 date: new Date(year, month + 1, i),
                 weightEntry: undefined,
                 workoutSessions: [],
+                enduranceEntries: [],
                 measurements: [],
                 nutritionLogs: []
             });
         }
 
         return result;
-    }, [currentYear, currentMonth, weightsQuery.data, sessionQuery.data, categoryQuery.data, measurementQuery.data, nutritionDiaryQuery.data, t]);
+    }, [currentYear, currentMonth, weightsQuery.data, sessionQuery.data, enduranceQuery.data, categoryQuery.data, measurementQuery.data, nutritionDiaryQuery.data, t]);
     const [selectedDay, setSelectedDay] = useState<DayProps>(days.find(day => isSameDay(day.date, requestedDate)) || defaultDay);
 
     const theme = useTheme();
@@ -275,7 +288,7 @@ const CalendarComponent = (props: { isStandalone?: boolean }) => {
                     <LoadingPlaceholder />
                 </Card>}
 
-            {isSuccess && <Entries selectedDay={selectedDay} isStandalone={isStandalone} />}
+            {isSuccess && <Entries selectedDay={selectedDay} isStandalone={isStandalone} enduranceError={enduranceQuery.isError} />}
         </Box>
     );
 };

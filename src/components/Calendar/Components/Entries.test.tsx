@@ -30,7 +30,8 @@ describe('Entries Component', () => {
         weightEntry: undefined,
         measurements: [],
         nutritionLogs: [],
-        workoutSessions: []
+        workoutSessions: [],
+        enduranceEntries: []
     };
 
     test('Correctly shows date and title', () => {

@@ -4,6 +4,8 @@ import {
     getMeasurementCategories
 } from "@/components/Measurements/api/measurements";
 import { getNutritionalDiaryEntries } from "@/components/Nutrition/api/nutritionalDiary";
+import { EnduranceEntry, getEnduranceEntries } from "@/components/Calendar/api/endurance";
+import { QueryKey } from "@/core/lib/consts";
 import { getSessions } from "@/components/Routines/api/session";
 import { deleteSession } from "@/components/Routines/api/sessionRecovery";
 import { getRoutine } from "@/components/Routines/api/routine";
@@ -34,6 +36,7 @@ import CalendarComponent from "./CalendarComponent";
 
 vi.mock("@/components/Measurements/api/measurements");
 vi.mock("@/components/Nutrition/api/nutritionalDiary");
+vi.mock("@/components/Calendar/api/endurance");
 vi.mock("@/components/Routines/api/session");
 vi.mock("@/components/Routines/api/sessionRecovery");
 vi.mock("@/components/Routines/api/routine");
@@ -115,6 +118,9 @@ describe('CalendarComponent', () => {
             ),
         ]));
 
+        (getEnduranceEntries as Mock).mockResolvedValue([]);
+        // A failure must show at once, not after the default retries
+        testQueryClient.setQueryDefaults([QueryKey.ENDURANCE_ENTRIES], { retry: false });
         (getNutritionalDiaryEntries as Mock).mockImplementation(() => Promise.resolve([
             TEST_DIARY_ENTRY_1,
             TEST_DIARY_ENTRY_2,
@@ -408,6 +414,93 @@ describe('CalendarComponent', () => {
             await user.click(await screen.findByText('routines.workoutSession'));
 
             expect(screen.queryByRole('button', { name: 'Delete workout' })).toBeNull();
+        });
+    });
+
+    describe('Intervals.icu endurance rows', () => {
+        // Synthetic rows shaped like /api/v2/endurance-entry/, adapted
+        const row = (overrides: Partial<EnduranceEntry>): EnduranceEntry => ({
+            id: 'e1', kind: 'completed', sport: 'Ride', name: null,
+            localDate: '2024-12-08', startLocal: '2024-12-08T07:00:00',
+            movingTimeS: null, elapsedTimeS: null, distanceM: null,
+            trainingLoad: null, loadTarget: null, timeTargetS: null,
+            intensity: null, avgHr: null, maxHr: null,
+            link: 'https://intervals.icu/activities/i1', linkExact: true,
+            ...overrides,
+        });
+        const sundayRide = row({
+            id: 'ride', name: 'Long Sunday ride', movingTimeS: 4 * 3600, elapsedTimeS: 4 * 3600 + 900,
+            distanceM: 120400, trainingLoad: 210, intensity: 71.5, avgHr: 128, maxHr: 161,
+            link: 'https://intervals.icu/activities/i1234',
+        });
+        const plannedRun = row({
+            id: 'plan', kind: 'planned', sport: 'Run', localDate: '2024-12-10', startLocal: '2024-12-10T06:00:00',
+            timeTargetS: 2700, loadTarget: 40,
+            link: 'https://intervals.icu/?s=2024-12-10&e=2024-12-10', linkExact: false,
+        });
+        const bareSwim = row({ id: 'swim', sport: 'Swim', localDate: '2024-12-10', startLocal: '2024-12-10T18:15:00', link: 'https://intervals.icu/activities/i99' });
+
+        test('reads the month as athlete-local days', async () => {
+            (getEnduranceEntries as Mock).mockResolvedValue([]);
+            renderComponent();
+            await screen.findByTestId('day-2024-12-01');
+
+            expect(getEnduranceEntries).toHaveBeenCalledWith({ from: '2024-12-01', to: '2024-12-31' });
+        });
+
+        test('a completed 4 h ride shows its Intervals values, units and exact link', async () => {
+            (getEnduranceEntries as Mock).mockResolvedValue([sundayRide]);
+            renderComponent();
+            await user.click(await screen.findByTestId('day-2024-12-08'));
+
+            const item = await screen.findByTestId('endurance-ride');
+            expect(within(item).getByText('Completed')).toBeInTheDocument();
+            expect(within(item).getByText('Ride')).toBeInTheDocument();
+            expect(within(item).getByText('Long Sunday ride')).toBeInTheDocument();
+            expect(within(item).getByText('Moving 4 h 0 min · Load (Intervals) 210 · 120.4 km · Avg HR 128 bpm · Max HR 161 bpm · Intensity (Intervals) 71.5')).toBeInTheDocument();
+            // Never called TSS: Intervals' load is only TSS when power-based
+            expect(item).not.toHaveTextContent(/TSS/);
+            const link = within(item).getByRole('link', { name: 'Open in Intervals.icu' });
+            expect(link).toHaveAttribute('href', 'https://intervals.icu/activities/i1234');
+            expect(link).toHaveAttribute('target', '_blank');
+            // Read-only: nothing here edits, deletes or syncs it
+            expect(within(item).queryByRole('button')).toBeNull();
+            expect(screen.queryByText(/sync/i)).toBeNull();
+        });
+
+        test('beside a gym workout, a planned run falls back to the Intervals day and a bare swim invents nothing', async () => {
+            const gym = WorkoutSession.clone(testWorkoutSession, { datetimeStart: new Date(currentYear, currentMonth, 10, 10, 30) });
+            (getSessions as Mock).mockResolvedValue([gym]);
+            (getEnduranceEntries as Mock).mockResolvedValue([plannedRun, bareSwim]);
+            renderComponent();
+            await user.click(await screen.findByTestId('day-2024-12-10'));
+
+            const planned = await screen.findByTestId('endurance-plan');
+            expect(within(planned).getByText('Planned')).toBeInTheDocument();
+            expect(within(planned).getByText('Planned 45 min · Load target (Intervals) 40')).toBeInTheDocument();
+            expect(within(planned).getByRole('link', { name: 'Open day in Intervals.icu' })).toHaveAttribute('href', 'https://intervals.icu/?s=2024-12-10&e=2024-12-10');
+            expect(within(planned).getByText(/opens the calendar day/)).toBeInTheDocument();
+
+            // Missing metrics stay missing: no zeros, no bpm, no distance
+            const swim = screen.getByTestId('endurance-swim');
+            expect(within(swim).getByText('Moving — · Load (Intervals) —')).toBeInTheDocument();
+            expect(swim).not.toHaveTextContent(/bpm|km|Intensity/);
+
+            // The gym workout keeps its own row and actions, with no sets made up from the run
+            await user.click(screen.getByText('routines.workoutSession'));
+            expect(screen.getByRole('button', { name: 'Delete workout' })).toBeInTheDocument();
+            expect(within(planned).queryByText(/Set \d/)).toBeNull();
+        });
+
+        test('a failed Intervals read keeps the gym calendar', async () => {
+            const gym = WorkoutSession.clone(testWorkoutSession, { datetimeStart: new Date(currentYear, currentMonth, 10, 10, 30) });
+            (getSessions as Mock).mockResolvedValue([gym]);
+            (getEnduranceEntries as Mock).mockRejectedValue(new Error('502'));
+            renderComponent();
+            await user.click(await screen.findByTestId('day-2024-12-10'));
+
+            expect(await screen.findByText('Could not load rides and runs from Intervals.icu.')).toBeInTheDocument();
+            expect(screen.getByText('routines.workoutSession')).toBeInTheDocument();
         });
     });
 });
