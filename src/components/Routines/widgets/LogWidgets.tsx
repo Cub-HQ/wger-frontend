@@ -2,7 +2,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
-import { Box, Card, CardContent, InputAdornment, Typography } from '@mui/material';
+import { Box, Card, CardContent, InputAdornment, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import Grid from "@mui/material/Grid";
 import {
     DataGrid,
@@ -57,9 +57,27 @@ import {
 } from "recharts";
 import { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { generateChartColors } from "@/core/lib/colors";
-import { PAGINATION_OPTIONS, REP_UNIT_KILOMETERS, WEIGHT_UNIT_KMH } from "@/core/lib/consts";
+import {
+    PAGINATION_OPTIONS,
+    REP_UNIT_KILOMETERS,
+    REP_UNIT_METERS,
+    REP_UNIT_MILES,
+    REP_UNIT_MINUTES,
+    REP_UNIT_REPETITIONS,
+    REP_UNIT_SECONDS,
+    REP_UNIT_TILL_FAILURE,
+    WEIGHT_UNIT_KG,
+    WEIGHT_UNIT_KMH,
+    WEIGHT_UNIT_LB,
+    WEIGHT_UNIT_MPH
+} from "@/core/lib/consts";
 import { dateToLocale } from "@/core/lib/date";
-import { filterProgressionChartData } from "@/components/Routines/widgets/progressionChartRange";
+import {
+    filterProgressionChartData,
+    loadProgressionChartRange,
+    PROGRESSION_CHART_RANGES,
+    sessionKey
+} from "@/components/Routines/widgets/progressionChartRange";
 
 // Decimal cardio columns: field, header translation key, the server's limits, optional unit label
 type CardioHeaderKey = 'routines.cardioDistance' | 'routines.cardioMaxSpeedShort' | 'routines.cardioInclineShort' | 'routines.cardioLevelShort' | 'routines.cardioCaloriesShort';
@@ -359,21 +377,66 @@ export const ExerciseLog = (props: { exercise: Exercise, routineId: number, logE
         </Grid>
     </>;
 };
+const LB_IN_KG = 0.45359237;
+const REP_UNIT_LABELS: Record<number, string> = {
+    [REP_UNIT_REPETITIONS]: "reps",
+    [REP_UNIT_TILL_FAILURE]: "reps",
+    [REP_UNIT_SECONDS]: "s",
+    [REP_UNIT_MINUTES]: "min",
+    [REP_UNIT_MILES]: "mi",
+    [REP_UNIT_KILOMETERS]: "km",
+    [REP_UNIT_METERS]: "m",
+};
+const WEIGHT_UNIT_LABELS: Record<number, string> = {
+    [WEIGHT_UNIT_KG]: "kg",
+    [WEIGHT_UNIT_LB]: "lb",
+    [WEIGHT_UNIT_KMH]: "km/h",
+    [WEIGHT_UNIT_MPH]: "mph",
+};
+// Logs saved before units were stored count repetitions and kilograms, the server defaults
+const repUnitOf = (log: WorkoutLog) => REP_UNIT_LABELS[log.repetitionUnitId ?? REP_UNIT_REPETITIONS] ?? log.repetitionUnitObj?.name ?? `unit ${log.repetitionUnitId}`;
+
+// A load in kg; body weight, plates or a legacy speed are no load, so they are never charted as kg
+const kgOf = (log: WorkoutLog) => {
+    if (log.weight === null) return null;
+    if (log.weightUnitId === WEIGHT_UNIT_LB) return log.weight * LB_IN_KG;
+    return (log.weightUnitId ?? WEIGHT_UNIT_KG) === WEIGHT_UNIT_KG ? log.weight : null;
+};
+
+export type ChartMetric = "weight" | "reps";
+export type ChartPoint = { id: number | string, value: number, time: number, entry: WorkoutLog };
+
 /*
- * Format the log entries so that they can be passed to the chart
+ * The chart's points, one series per set number (the Nth logged row of a session).
  *
- * This is mostly due to the time, which needs to be a number to be shown
- * in the scatter plot
+ * A missing value is a gap, never 0; a stored 0 is plotted. Units never share an axis:
+ * lb is converted to kg, other weight units are left out, and when the repetitions of
+ * the range use several units only the newest session's unit is charted.
  */
-const formatData = (data: WorkoutLog[], byReps = false) =>
-    data.map((log) => {
-        return {
-            id: log.id,
-            value: byReps ? log.repetitions : log.weight,
-            time: log.date.getTime(),
-            entry: log,
-        };
+export const progressionSeries = (data: WorkoutLog[], metric: ChartMetric) => {
+    const withReps = data.filter(log => log.repetitions !== null);
+    const newest = withReps.reduce<WorkoutLog | null>((latest, log) => latest === null || log.date >= latest.date ? log : latest, null);
+    const repUnit = newest ? repUnitOf(newest) : "reps";
+    const mixedUnits = metric === "reps" && withReps.some(log => repUnitOf(log) !== repUnit);
+
+    const counters = new Map<string, number>();
+    const series = new Map<number, ChartPoint[]>();
+    // Every set of one workout shares that workout's date, so hovering one dot lists them all.
+    const sets = new Map<number, [number, WorkoutLog][]>();
+    data.forEach(log => {
+        const session = sessionKey(log);
+        const set = (counters.get(session) ?? 0) + 1;
+        counters.set(session, set);
+        const time = log.date.getTime();
+        sets.set(time, [...(sets.get(time) ?? []), [set, log]]);
+        const value = metric === "weight" ? kgOf(log) : repUnitOf(log) === repUnit ? log.repetitions : null;
+        if (value !== null) {
+            series.set(set, [...(series.get(set) ?? []), { id: log.id, value, time, entry: log }]);
+        }
     });
+    const ticks = [...new Set([...series.values()].flat().map(point => point.time))].sort((a, b) => a - b);
+    return { series: [...series].sort((a, b) => a[0] - b[0]), sets, ticks, repUnit, mixedUnits };
+};
 
 const exerciseLogTooltip = (sets: Map<number, [number, WorkoutLog][]>) => ({ active, payload }: TooltipContentProps<ValueType, NameType>) => {
     const time = payload?.[0]?.payload?.time as number | undefined;
@@ -384,74 +447,82 @@ const exerciseLogTooltip = (sets: Map<number, [number, WorkoutLog][]>) => ({ act
         <CardContent>
             <Typography variant="body1">{DateTime.fromMillis(time).toFormat('dd/MM/yy')}</Typography>
             {(sets.get(time) ?? []).map(([set, log]) => <Typography variant="body2" key={log.id}>
-                Set {set}: {log.weight ? `${log.repetitions} × ${log.weight}kg` : `${log.repetitions} reps`}{log.rir ? `, ${log.rir} RiR` : ''}
+                Set {set}: {log.repetitions ?? "—"} {repUnitOf(log)} × {log.weight === null ? "—" : `${log.weight} ${WEIGHT_UNIT_LABELS[log.weightUnitId ?? WEIGHT_UNIT_KG] ?? log.weightUnitObj?.name ?? ""}`.trim()}{log.rir ? `, ${log.rir} RiR` : ''}
             </Typography>)}
         </CardContent>
     </Card>;
 };
 
 export const TimeSeriesChart = (props: { data: WorkoutLog[] }) => {
+    const [picked, setPicked] = React.useState<ChartMetric | null>(null);
+    const range = loadProgressionChartRange();
+    const rangeLabel = PROGRESSION_CHART_RANGES.find(option => option.value === range)!.label;
+    const chartData = filterProgressionChartData(props.data, range);
+    // Bodyweight moves (e.g. superman) log reps only, so reps are the default when no set carries a load.
+    const metric = picked ?? (chartData.some(log => (kgOf(log) ?? 0) > 0) ? "weight" : "reps");
+    const { series, sets, ticks, repUnit, mixedUnits } = progressionSeries(chartData, metric);
+    const colorGenerator = generateChartColors(series.length);
 
-    const chartData = filterProgressionChartData(props.data);
-
-    // A set keeps the same colour across workout dates so its progression is visible.
-    const counters = new Map<string, number>();
-    const result = new Map<number, WorkoutLog[]>();
-    chartData.forEach(log => {
-        const session = log.sessionId ?? log.date.toDateString();
-        const setNumber = (counters.get(session) ?? 0) + 1;
-        counters.set(session, setNumber);
-        result.set(setNumber, [...(result.get(setNumber) ?? []), log]);
-    });
-    // Every set of one workout shares that workout's date, so hovering one dot lists them all.
-    const sets = new Map<number, [number, WorkoutLog][]>();
-    result.forEach((logs, set) => logs.forEach(log => sets.set(log.date.getTime(), [...(sets.get(log.date.getTime()) ?? []), [set, log]])));
-    const ticks = [...sets.keys()].sort((a, b) => a - b);
-    // Bodyweight moves (e.g. superman) log reps only, so chart reps when no set carries weight.
-    const byReps = !chartData.some(log => log.weight !== null && log.weight !== 0);
-
-    const colorGenerator = generateChartColors(result.size);
+    let empty = null;
+    if (props.data.length === 0) {
+        empty = "No recorded sets yet.";
+    } else if (chartData.length === 0) {
+        empty = `No sets in the chart range (${rangeLabel}). Change "Exercise chart range" in Preferences to see older workouts.`;
+    } else if (ticks.length === 0) {
+        empty = `No ${metric === "weight" ? "kg" : "reps"} recorded in the chart range (${rangeLabel}). Try ${metric === "weight" ? "Reps" : "kg"}.`;
+    }
 
     return (
         <Box>
-            <ScatterChart responsive width={"100%"} height={250}>
-                <XAxis
-                    dataKey="time"
-                    domain={["auto", "auto"]}
-                    name="Time"
-                    ticks={ticks}
-                    interval={0}
-                    padding={{ left: 16, right: 16 }}
-                    tickFormatter={unixTime => DateTime.fromMillis(unixTime).toFormat('dd/MM/yy')}
-                    type="number"
-                />
-                <YAxis
-                    domain={["auto", "auto"]}
-                    dataKey="value"
-                    name="Value"
-                    unit={byReps ? " reps" : "kg"}
-                />
+            <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={metric}
+                onChange={(_, value: ChartMetric | null) => value && setPicked(value)}
+                aria-label="Chart measure"
+            >
+                <ToggleButton value="weight">kg</ToggleButton>
+                <ToggleButton value="reps">Reps</ToggleButton>
+            </ToggleButtonGroup>
+            {mixedUnits && <Typography variant="caption" color="text.secondary" component="p">
+                Only sets counted in {repUnit} are shown; the others use a different unit.
+            </Typography>}
+            {empty !== null ? <Typography color="text.secondary" sx={{ py: 4 }}>{empty}</Typography> :
+                <ScatterChart responsive width={"100%"} height={250}>
+                    <XAxis
+                        dataKey="time"
+                        domain={["auto", "auto"]}
+                        name="Time"
+                        ticks={ticks}
+                        interval={0}
+                        padding={{ left: 16, right: 16 }}
+                        tickFormatter={unixTime => DateTime.fromMillis(unixTime).toFormat('dd/MM/yy')}
+                        type="number"
+                    />
+                    <YAxis
+                        domain={["auto", "auto"]}
+                        dataKey="value"
+                        name="Value"
+                        unit={metric === "weight" ? "kg" : ` ${repUnit}`}
+                    />
 
-                {Array.from(result).map(([key, value]) => {
+                    {series.map(([set, points]) => {
                         const color = colorGenerator.next().value!;
-                        const formattedData = formatData(value, byReps);
-
                         return <Scatter
-                            key={key}
-                            data={formattedData}
+                            key={set}
+                            data={points}
                             fill={color}
                             line={{ stroke: color }}
                             lineType="joint"
                             lineJointType="monotoneX"
-                            name={`Set ${key}`}
+                            name={`Set ${set}`}
                         />;
-                    }
-                )}
+                    })}
 
-                <Tooltip content={exerciseLogTooltip(sets)} />
-                <CartesianGrid strokeDasharray="3 3" />
-                <Legend />
-            </ScatterChart>
+                    <Tooltip content={exerciseLogTooltip(sets)} />
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <Legend />
+                </ScatterChart>}
         </Box>
     );
 };
