@@ -245,6 +245,8 @@
         "weekNr": "Week {{number}}",
         "iterationNr": "Iteration {{number}}",
         "backToRoutine": "Back to routine",
+        "plannedFor": "Planned for {{date}}",
+        "plannedOccurrenceUnavailable": "This planned workout is unavailable: the day isn't part of this routine or isn't scheduled on that date.",
         "minLengthRoutine": "The routine needs to be at least {{number}} weeks long",
         "maxLengthRoutine": "The routine can be at most {{number}} weeks long",
         "resultingRoutine": "Resulting routine",
