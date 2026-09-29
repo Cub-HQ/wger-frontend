@@ -3,6 +3,7 @@ import { dateTimeToLocale, dateToLocale } from "@/core/lib/date";
 import { ExpandLess, ExpandMore } from '@mui/icons-material';
 import {
     Alert,
+    Button,
     Card,
     CardContent,
     CardHeader,
@@ -16,15 +17,14 @@ import {
     ListItem,
     ListItemButton,
     ListItemText,
+    Stack,
     Typography
 } from '@mui/material';
 import React from 'react';
 import { useTranslation } from "react-i18next";
 import type { DayProps } from "./CalendarComponent";
-import { SetSummary } from "@/components/Routines/widgets/WaveOne";
-import { useDeleteSessionQuery, useSessionsQuery, WorkoutSession } from "@/components/Routines";
+import { SessionSummary, useDeleteSessionQuery, useSessionsQuery, WorkoutSession } from "@/components/Routines";
 import EditIcon from "@mui/icons-material/Edit";
-import { Button, Stack } from "@mui/material";
 import { makeLink, WgerLink } from "@/core/lib/url";
 
 interface LogProps {
@@ -179,20 +179,16 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone }) => {
                             </ListItemButton>
                         </ListItem>
                         <Collapse in={openSessionId === session.id} timeout="auto" unmountOnExit>
-                            <List sx={{ pl: 4, pt: 0 }}>
-                                {session.logs.map((log) => (
-                                    <ListItem key={log.id} dense>
-                                        <ListItemText primary={log.exerciseObj?.getTranslation().name} secondary={<SetSummary log={log} sessions={allSessions.data ?? []} />} />
-                                    </ListItem>))}
-                                <ListItem>
-                                    <Stack direction="row" spacing={1}>
-                                        <Button href={makeLink(WgerLink.SESSION_DETAIL, i18n.language, { id: session.id! })}>View workout</Button>
-                                        <Button href={makeLink(WgerLink.SESSION_EDIT, i18n.language, { id: session.id! })} startIcon={<EditIcon />}>Edit sets</Button>
-                                        {/* Only a saved session can go through the session API */}
-                                        {session.id && <Button color="error" disabled={deletion.isPending} onClick={() => { setError(''); setMessage(''); setDeleting(session); }}>Delete workout</Button>}
-                                    </Stack>
-                                </ListItem>
-                            </List>
+                            <Stack spacing={2} sx={{ px: { xs: 0, sm: 2 }, pb: 2 }}>
+                                {/* Above the sets, so they are reachable without scrolling through all of them */}
+                                <Stack direction="row" useFlexGap spacing={1} sx={{ flexWrap: 'wrap' }}>
+                                    <Button href={makeLink(WgerLink.SESSION_DETAIL, i18n.language, { id: session.id! })}>View workout</Button>
+                                    <Button href={makeLink(WgerLink.SESSION_EDIT, i18n.language, { id: session.id! })} startIcon={<EditIcon />}>Edit sets</Button>
+                                    {/* Only a saved session can go through the session API */}
+                                    {session.id && <Button color="error" disabled={deletion.isPending} onClick={() => { setError(''); setMessage(''); setDeleting(session); }}>Delete workout</Button>}
+                                </Stack>
+                                <SessionSummary session={session} sessions={allSessions.data ?? []} />
+                            </Stack>
                         </Collapse>
                     </React.Fragment>)}
 

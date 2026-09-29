@@ -49,3 +49,4 @@ export { useActiveRoutineQuery, useDeleteSessionQuery, useSessionsQuery } from "
 // Widgets
 export { SetConfigDataDetails } from "./widgets/RoutineDetailsCard";
 export { mountProgressionChartRangeSetting } from "./widgets/progressionChartRange";
+export { SessionSummary } from "./widgets/WaveOne";
