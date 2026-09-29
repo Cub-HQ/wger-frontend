@@ -1,5 +1,6 @@
 import {
     addRoutine,
+    confirmRoutineImport,
     deleteRoutine,
     editRoutine,
     getActiveRoutine,
@@ -9,7 +10,8 @@ import {
     getRoutineLogData,
     getRoutines,
     getRoutinesShallow,
-    getRoutineStatisticsData
+    getRoutineStatisticsData,
+    ImportRequest
 } from "@/components/Routines/api/routine";
 import { Routine } from "@/components/Routines/models/Routine";
 import { QueryKey, } from "@/core/lib/consts";
@@ -117,6 +119,21 @@ export const useDeleteRoutineQuery = (id: number) => {
             queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_OVERVIEW] });
             queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, id] });
         }
+    });
+};
+
+export const useConfirmRoutineImportQuery = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ request, planHash }: { request: ImportRequest, planHash: string }) =>
+            confirmRoutineImport(request, planHash),
+        onSuccess: (data) => Promise.all([
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_OVERVIEW] }),
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINES_SHALLOW] }),
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINES_ACTIVE] }),
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, data.id] }),
+        ]),
     });
 };
 

@@ -1,12 +1,13 @@
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { Chip, Divider, List, ListItem, ListItemButton, ListItemText, Paper, } from "@mui/material";
+import { Box, Button, Chip, Divider, List, ListItem, ListItemButton, ListItemText, Paper, } from "@mui/material";
 import { LoadingPlaceholder } from "@/core/ui/LoadingWidget/LoadingWidget";
 import { WgerContainerRightSidebar } from "@/core/ui/Widgets/Container";
 import { OverviewEmpty } from "@/core/ui/Widgets/OverviewEmpty";
 import { Routine } from "@/components/Routines/models/Routine";
 import { AddRoutineFab } from "@/components/Routines/screens/Overview/Fab";
 import { useRoutinesShallowQuery } from "@/components/Routines/queries";
-import React from "react";
+import { RoutineImportDialog } from "@/components/Routines/widgets/RoutineImportDialog";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dateToLocale } from "@/core/lib/date";
 import { makeLink, WgerLink } from "@/core/lib/url";
@@ -54,6 +55,7 @@ export const RoutineList = (props: {
 export const RoutineOverview = () => {
     const routineQuery = useRoutinesShallowQuery();
     const [t] = useTranslation();
+    const [importOpen, setImportOpen] = useState(false);
 
     if (routineQuery.isLoading) {
         return <LoadingPlaceholder />;
@@ -63,6 +65,11 @@ export const RoutineOverview = () => {
     return <WgerContainerRightSidebar
         title={t("routines.routines")}
         mainContent={<>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                <Button variant="outlined" size="small" onClick={() => setImportOpen(true)}>
+                    {t("routines.spreadsheet.import")}
+                </Button>
+            </Box>
             {routineQuery.data!.length === 0
                 ? <OverviewEmpty />
                 : <Paper>
@@ -70,6 +77,11 @@ export const RoutineOverview = () => {
                         {routineQuery.data!.map(r => <RoutineList routine={r} key={r.id} />)}
                     </List>
                 </Paper>}
+            <RoutineImportDialog
+                open={importOpen}
+                onClose={() => setImportOpen(false)}
+                routines={routineQuery.data ?? []}
+            />
         </>}
         fab={<AddRoutineFab />}
     />;

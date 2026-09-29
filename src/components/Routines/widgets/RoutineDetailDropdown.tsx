@@ -1,5 +1,6 @@
 import MenuIcon from '@mui/icons-material/Menu';
 import {
+    Alert,
     Button,
     Dialog,
     DialogActions,
@@ -8,8 +9,10 @@ import {
     DialogTitle,
     Divider,
     Menu,
-    MenuItem
+    MenuItem,
+    Snackbar
 } from "@mui/material";
+import { downloadRoutineSpreadsheet } from "@/components/Routines/api/routine";
 import { Routine } from "@/components/Routines/models/Routine";
 import { useDeleteRoutineQuery } from "@/components/Routines/queries";
 import { RoutineTemplateForm } from "@/components/Routines/widgets/forms/RoutineTemplateForm";
@@ -33,6 +36,7 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
     const [t, i18n] = useTranslation();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [deleteConfirmationOpen, setConfirmationOpen] = useState<DialogToOpen>(DialogToOpen.NONE);
+    const [downloadFailed, setDownloadFailed] = useState(false);
 
     const open = Boolean(anchorEl);
     const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -135,9 +139,27 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                     download={`Routine-${props.routine.id}-calendar.ics`}>
                     {t("routines.downloadIcal")}
                 </MenuItem>
+                <MenuItem onClick={() => {
+                    handleClose();
+                    downloadRoutineSpreadsheet('csv', props.routine.id!).catch(() => setDownloadFailed(true));
+                }}>
+                    {t("routines.spreadsheet.downloadCsv")}
+                </MenuItem>
+                <MenuItem onClick={() => {
+                    handleClose();
+                    downloadRoutineSpreadsheet('xlsx', props.routine.id!).catch(() => setDownloadFailed(true));
+                }}>
+                    {t("routines.spreadsheet.downloadXlsx")}
+                </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleDelete}>{t("delete")}</MenuItem>
             </Menu>
+
+            <Snackbar open={downloadFailed} onClose={() => setDownloadFailed(false)}>
+                <Alert severity="error" onClose={() => setDownloadFailed(false)}>
+                    {t("routines.spreadsheet.downloadFailed")}
+                </Alert>
+            </Snackbar>
 
             <Dialog
                 open={deleteConfirmationOpen === DialogToOpen.DELETE_CONFIRMATION}

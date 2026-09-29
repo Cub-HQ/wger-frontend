@@ -263,3 +263,97 @@ export const getRoutineStatisticsData = async (routineId: number): Promise<Routi
 
     return new RoutineStatsDataAdapter().fromJson(response.data);
 };
+
+export type SpreadsheetKind = 'csv' | 'xlsx';
+export type ImportMode = 'create' | 'update';
+
+export interface ImportRequest {
+    file: File;
+    mode: ImportMode;
+    // Only for update, the owned routine the file is applied to
+    routineId: number | null;
+    dropUnsupported: boolean;
+}
+
+type ImportCounts = { days: number, slots: number, entries: number };
+
+export type ImportExerciseMatch =
+    | { how: 'id' | 'uuid' | 'name', id: number, name: string }
+    | { how: 'mismatch', id: number }
+    | { how: 'ambiguous', candidates: { id: number, name: string }[] }
+    | { how: 'unresolved' };
+
+// The import-preview response (and the body of a 400/409 import-confirm)
+export interface ImportPreview {
+    ok: boolean;
+    plan_hash: string;
+    mode: ImportMode;
+    routine: { id: number | null, name: string, description: string, start: string, end: string } | null;
+    rows: { row: number, status?: 'ok' | 'error', exercise: ImportExerciseMatch | null }[];
+    errors: { row: number | null, column: string | null, message: string }[];
+    diff: {
+        create: ImportCounts,
+        update: ImportCounts,
+        delete: ImportCounts,
+        blocked_deletes: { kind: string, id: number, reason: string }[],
+    };
+    unsupported_dropped: { row: number, codes: string[] }[];
+    detail?: string;
+}
+
+/*
+ * Downloads a routine (or, without an id, the empty import template) as a CSV or XLSX file
+ */
+export const downloadRoutineSpreadsheet = async (kind: SpreadsheetKind, routineId?: number): Promise<void> => {
+    const url = routineId === undefined
+        ? makeUrl(ApiPath.ROUTINE, { objectMethod: 'import-template', query: { file: kind } })
+        : makeUrl(ApiPath.ROUTINE, { id: routineId, objectMethod: 'export', query: { file: kind } });
+    const response = await axios.get<Blob>(url, { headers: makeHeader(), responseType: 'blob' });
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(response.data);
+    link.download = `${routineId === undefined ? 'routine-template' : `routine-${routineId}`}.${kind}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+};
+
+const importForm = (request: ImportRequest, planHash?: string) => {
+    const form = new FormData();
+    form.append('file', request.file);
+    form.append('mode', request.mode);
+    if (request.mode === 'update') {
+        form.append('routine', String(request.routineId ?? ''));
+    }
+    form.append('drop_unsupported', String(request.dropUnsupported));
+    if (planHash !== undefined) {
+        form.append('plan_hash', planHash);
+    }
+    return form;
+};
+
+const multipartHeader = () => ({ ...makeHeader(), 'Content-Type': 'multipart/form-data' });
+
+/*
+ * Checks an uploaded file, nothing is written
+ */
+export const previewRoutineImport = async (request: ImportRequest): Promise<ImportPreview> => {
+    const response = await axios.post<ImportPreview>(
+        makeUrl(ApiPath.ROUTINE, { objectMethod: 'import-preview' }),
+        importForm(request),
+        { headers: multipartHeader() }
+    );
+    return response.data;
+};
+
+/*
+ * Applies a previewed file in one transaction. Rejects with 400 (the plan has
+ * errors) or 409 (file or routine changed since the preview), nothing written
+ */
+export const confirmRoutineImport = async (request: ImportRequest, planHash: string): Promise<{ id: number }> => {
+    const response = await axios.post<{ id: number }>(
+        makeUrl(ApiPath.ROUTINE, { objectMethod: 'import-confirm' }),
+        importForm(request, planHash),
+        { headers: multipartHeader() }
+    );
+    return response.data;
+};
