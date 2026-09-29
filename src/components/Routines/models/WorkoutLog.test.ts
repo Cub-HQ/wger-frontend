@@ -134,6 +134,18 @@ describe('WorkoutLog model', () => {
 
             rest: 120,
             rest_target: 90,
+
+            // A strength log without cardio keys sends them as null, never as zero
+            average_speed: null,
+            pace: null,
+            incline: null,
+            calories: null,
+            duration: null,
+            distance: null,
+            distance_unit: null,
+            max_speed: null,
+            max_speed_unit: null,
+            level: null,
         });
     });
 

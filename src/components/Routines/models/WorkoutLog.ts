@@ -5,7 +5,9 @@ import { RepetitionUnit } from "@/components/Routines/models/RepetitionUnit";
 import { WeightUnit } from "@/components/Routines/models/WeightUnit";
 import { Adapter } from "@/core/lib/Adapter";
 
-export interface LogEntryForm {
+import type { CardioInput } from "@/components/Routines/models/cardio";
+// The cardio inputs come from CardioInput, all as typed; time is "HH:MM:SS"
+export interface LogEntryForm extends CardioInput {
     clientKey: string;
     exercise: Exercise | null;
     repetitionsUnit: RepetitionUnit | null;
@@ -47,6 +49,19 @@ export class WorkoutLog {
     public restTime: number | null;
     public restTimeTarget: number | null;
 
+    // Cardio metrics. The primary measure stays in repetitions, these hold the
+    // other ones: duration in seconds, distance in its own unit, the max speed
+    // in km/h or mph. Level is the machine's unitless effort, not RiR/RPE.
+    public averageSpeed: number | null;
+    public pace: number | null;
+    public incline: number | null;
+    public calories: number | null;
+    public duration: number | null;
+    public distance: number | null;
+    public distanceUnitId: number | null;
+    public maxSpeed: number | null;
+    public maxSpeedUnitId: number | null;
+    public level: number | null;
 
     public exerciseObj?: Exercise;
 
@@ -75,7 +90,18 @@ export class WorkoutLog {
         rirTarget?: number | null;
 
         restTime?: number | null;
-        restTimeTarget?: number | null
+        restTimeTarget?: number | null;
+
+        averageSpeed?: number | null;
+        pace?: number | null;
+        incline?: number | null;
+        calories?: number | null;
+        duration?: number | null;
+        distance?: number | null;
+        distanceUnitId?: number | null;
+        maxSpeed?: number | null;
+        maxSpeedUnitId?: number | null;
+        level?: number | null;
     }) {
         // Note that all of these use ?? and not ||: zero is a meaningful value here.
         // Training to failure is 0 RiR, a bodyweight exercise has a weight of 0 and
@@ -105,6 +131,17 @@ export class WorkoutLog {
 
         this.restTime = data.restTime ?? null;
         this.restTimeTarget = data.restTimeTarget ?? null;
+
+        this.averageSpeed = data.averageSpeed ?? null;
+        this.pace = data.pace ?? null;
+        this.incline = data.incline ?? null;
+        this.calories = data.calories ?? null;
+        this.duration = data.duration ?? null;
+        this.distance = data.distance ?? null;
+        this.distanceUnitId = data.distanceUnitId ?? null;
+        this.maxSpeed = data.maxSpeed ?? null;
+        this.maxSpeedUnitId = data.maxSpeedUnitId ?? null;
+        this.level = data.level ?? null;
     }
 
     get rirString(): string {
@@ -112,6 +149,22 @@ export class WorkoutLog {
     }
 }
 
+// The API sends decimals as strings; a missing key reads as null, "0.00" as 0
+const decimal = (value: unknown): number | null => value === null || value === undefined ? null : Number.parseFloat(String(value));
+
+// The cardio part of a log in the API's keys, shared by the adapter and the forms
+export const cardioJson = (item: Pick<WorkoutLog, 'averageSpeed' | 'pace' | 'incline' | 'calories' | 'duration' | 'distance' | 'distanceUnitId' | 'maxSpeed' | 'maxSpeedUnitId' | 'level'>) => ({
+    average_speed: item.averageSpeed,
+    pace: item.pace,
+    incline: item.incline,
+    calories: item.calories,
+    duration: item.duration,
+    distance: item.distance,
+    distance_unit: item.distanceUnitId,
+    max_speed: item.maxSpeed,
+    max_speed_unit: item.maxSpeedUnitId,
+    level: item.level,
+});
 
 export class WorkoutLogAdapter implements Adapter<WorkoutLog> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,18 +179,29 @@ export class WorkoutLogAdapter implements Adapter<WorkoutLog> {
             routineId: item.routine,
 
             repetitionsUnitId: item.repetitions_unit,
-            repetitions: item.repetitions === null ? null : Number.parseFloat(item.repetitions),
-            repetitionsTarget: item.repetitions_target === null ? null : Number.parseFloat(item.repetitions_target),
+            repetitions: decimal(item.repetitions),
+            repetitionsTarget: decimal(item.repetitions_target),
 
             weightUnitId: item.weight_unit,
-            weight: item.weight === null ? null : Number.parseFloat(item.weight),
-            weightTarget: item.weight_target === null ? null : Number.parseFloat(item.weight_target),
+            weight: decimal(item.weight),
+            weightTarget: decimal(item.weight_target),
 
-            rir: item.rir === null ? null : Number.parseFloat(item.rir),
-            rirTarget: item.rir_target === null ? null : Number.parseFloat(item.rir_target),
+            rir: decimal(item.rir),
+            rirTarget: decimal(item.rir_target),
 
             restTime: item.rest,
-            restTimeTarget: item.rest_target
+            restTimeTarget: item.rest_target,
+
+            averageSpeed: decimal(item.average_speed),
+            pace: decimal(item.pace),
+            incline: decimal(item.incline),
+            calories: decimal(item.calories),
+            duration: decimal(item.duration),
+            distance: decimal(item.distance),
+            distanceUnitId: item.distance_unit ?? null,
+            maxSpeed: decimal(item.max_speed),
+            maxSpeedUnitId: item.max_speed_unit ?? null,
+            level: decimal(item.level),
         });
 
     toJson = (item: WorkoutLog) => ({
@@ -161,6 +225,8 @@ export class WorkoutLogAdapter implements Adapter<WorkoutLog> {
         rir_target: item.rirTarget,
 
         rest: item.restTime,
-        rest_target: item.restTimeTarget
+        rest_target: item.restTimeTarget,
+
+        ...cardioJson(item),
     });
 }

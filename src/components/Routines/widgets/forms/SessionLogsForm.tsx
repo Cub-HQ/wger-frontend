@@ -2,7 +2,24 @@ import { WgerTextField } from "@/core/forms/WgerTextField";
 import { LoadingPlaceholder } from "@/core/ui/LoadingWidget/LoadingWidget";
 import { Exercise, getLanguageByShortName, NameAutocompleter, useLanguageQuery } from "@/components/Exercises";
 import { RIR_VALUES_SELECT } from "@/components/Routines/models/BaseConfig";
-import { LogEntryForm } from "@/components/Routines/models/WorkoutLog";
+import { LogEntryForm, cardioJson } from "@/components/Routines/models/WorkoutLog";
+import {
+    cardioFieldsOf,
+    cardioMetrics,
+    LIMITS,
+    DISTANCE_UNIT_OPTIONS,
+    DISTANCE_UNITS,
+    EMPTY_CARDIO_INPUT,
+    hasCardioInput,
+    isCardioPlan,
+    lastSessionLogs,
+    primaryText,
+    speedLabel,
+    SPEED_UNITS,
+    TIME_UNITS,
+    validDecimal,
+    validDuration
+} from "@/components/Routines/models/cardio";
 import { useAddRoutineLogsQuery, useRoutineDetailQuery, useSessionOfDay, useSessionsQuery } from "@/components/Routines/queries";
 import { editSession } from "@/components/Routines/api/session";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
@@ -13,11 +30,60 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 import { Alert, Button, IconButton, InputAdornment, MenuItem, Snackbar, TextField, Typography } from "@mui/material";
 import Grid from '@mui/material/Grid';
-import { FieldArray, Form, Formik, FormikProps } from "formik";
+import { FieldArray, Form, Formik, FormikProps, useField } from "formik";
 import { DateTime } from "luxon";
 import React, { useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import * as yup from "yup";
+
+// A cardio set gets these inputs instead of reps/weight/RiR; a reps input only
+// when the plan counts repetitions (e.g. burpees in the cardio category)
+const CardioSetFields = ({ index, log }: { index: number, log: LogEntryForm }) => {
+    const { t } = useTranslation();
+    const [distanceUnit] = useField(`logs.${index}.distanceUnitId`);
+    const decimal = { slotProps: { htmlInput: { inputMode: 'decimal' as const } } };
+    const countsReps = ![...TIME_UNITS, ...DISTANCE_UNITS].includes(log.repetitionsUnit?.id ?? -1);
+    return <>
+        {countsReps && <Grid size={{ xs: 6, sm: 4 }}>
+            <WgerTextField fieldName={`logs.${index}.repetitions`} title={t('routines.reps')} fieldProps={decimal} />
+        </Grid>}
+        <Grid size={{ xs: 6, sm: 4 }}>
+            <WgerTextField fieldName={`logs.${index}.time`} title={t('routines.cardioTime')} fieldProps={{ placeholder: "00:00:00", slotProps: { htmlInput: { inputMode: 'numeric' } } }} />
+        </Grid>
+        <Grid size={{ xs: 4, sm: 3 }}>
+            <WgerTextField fieldName={`logs.${index}.distance`} title={t('routines.cardioDistance')} fieldProps={decimal} />
+        </Grid>
+        <Grid size={{ xs: 2, sm: 1 }}>
+            <TextField fullWidth select variant="standard" label={t('unit')} {...distanceUnit}>
+                {DISTANCE_UNIT_OPTIONS.map(option => <MenuItem key={option.id} value={option.id}>{option.label}</MenuItem>)}
+            </TextField>
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4 }}>
+            <WgerTextField fieldName={`logs.${index}.maxSpeed`} title={t('routines.cardioMaxSpeed')} fieldProps={decimal} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4 }}>
+            <WgerTextField fieldName={`logs.${index}.incline`} title={t('routines.cardioIncline')} fieldProps={decimal} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4 }}>
+            <WgerTextField fieldName={`logs.${index}.level`} title={t('routines.cardioLevel')} fieldProps={decimal} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4 }}>
+            <WgerTextField fieldName={`logs.${index}.calories`} title={t('routines.cardioCalories')} fieldProps={decimal} />
+        </Grid>
+    </>;
+};
+
+// What the plan asks of this set, never copied into the inputs
+const targetText = (log: LogEntryForm) => {
+    const parts = [];
+    if (log.repetitionsTarget !== null && log.repetitionsTarget !== '') parts.push(primaryText(Number(log.repetitionsTarget), log.repetitionsUnit?.id ?? null, log.repetitionsUnit?.name));
+    if (log.weightTarget !== null && log.weightTarget !== '' && SPEED_UNITS.includes(log.weightUnit?.id ?? -1)) parts.push(`max speed ${log.weightTarget} ${speedLabel(log.weightUnit!.id)}`);
+    return parts.join(" · ");
+};
+
+const isCardioRow = (log: LogEntryForm) => isCardioPlan(log.exercise, log.repetitionsUnit?.id);
+const initialDistanceUnit = (repetitionUnitId: number | undefined) =>
+    DISTANCE_UNITS.includes(repetitionUnitId ?? -1) ? repetitionUnitId! : EMPTY_CARDIO_INPUT.distanceUnitId;
 
 interface SessionLogsFormProps {
     dayId: number,
@@ -66,7 +132,13 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
             yup.object().shape({
                 rir: yup.number().nullable(),
                 repetitions: yup.number().typeError(t('forms.enterNumber')).nullable(),
-                weight: yup.number().typeError(t('forms.enterNumber')).nullable()
+                weight: yup.number().typeError(t('forms.enterNumber')).nullable(),
+                time: yup.string().test('duration', 'Use hh:mm:ss, e.g. 00:10:00', validDuration),
+                distance: yup.string().test('decimal', 'Up to 3 decimals', value => validDecimal(value, LIMITS.distance)),
+                maxSpeed: yup.string().test('decimal', 'Up to 2 decimals', value => validDecimal(value, LIMITS.maxSpeed)),
+                incline: yup.string().test('decimal', 'Up to 2 decimals', value => validDecimal(value, LIMITS.incline)),
+                level: yup.string().test('decimal', 'Up to 1 decimal', value => validDecimal(value, LIMITS.level)),
+                calories: yup.string().test('decimal', 'Up to 2 decimals', value => validDecimal(value, LIMITS.calories)),
             })
         ),
     });
@@ -74,8 +146,11 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
     const handleSubmit = async (values: { logs: LogEntryForm[] }) => {
         const iteration = hasNoIterationData ? null : iterationDayData[0].iteration;
         const data = values.logs
-            .filter(l => l.rir !== '' || l.repetitions !== '' || l.weight !== '')
-            .map(l => ({
+            .filter(l => l.rir !== '' || l.repetitions !== '' || l.weight !== '' || (isCardioRow(l) && hasCardioInput(l)))
+            .map(l => {
+                // A cardio set is one log with all its metrics, never one row per metric
+                const cardio = isCardioRow(l) ? cardioFieldsOf(l, l.repetitionsUnit?.id ?? null, l.repetitions !== '' ? Number(l.repetitions) : null) : null;
+                return {
                     date: selectedDate.toISO(),
                     session: session?.id,
                     iteration: iteration,
@@ -91,7 +166,7 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
 
                     // eslint-disable-next-line camelcase
                     repetitions_unit: l.repetitionsUnit?.id,
-                    repetitions: l.repetitions !== '' ? l.repetitions : null,
+                    repetitions: cardio ? cardio.repetitions : l.repetitions !== '' ? l.repetitions : null,
                     // eslint-disable-next-line camelcase
                     repetitions_target: l.repetitionsTarget !== '' ? l.repetitionsTarget : null,
 
@@ -100,8 +175,10 @@ export const SessionLogsForm = ({ dayId, routineId, selectedDate, chosenSessionI
                     weight: l.weight !== '' ? l.weight : null,
                     // eslint-disable-next-line camelcase
                     weight_target: l.weightTarget !== '' ? l.weightTarget : null,
-                }
-            ));
+
+                    ...(cardio ? cardioJson({ ...cardio, averageSpeed: null, pace: null }) : {}),
+                };
+            });
 
         await addLogsQuery.mutateAsync(data);
         if (session && pendingSubstitution.current) {
@@ -112,9 +189,15 @@ ${pendingSubstitution.current}`.trim() }));
         setSnackbarOpen(true);
     };
 
-    const previousFor = (exerciseId: number) => sessionsQuery.data?.flatMap(entry => entry.logs.map(log => ({ entry, log })))
-        .filter(item => item.log.exerciseId === exerciseId && item.entry.id !== session?.id && (!session || item.entry.datetimeStart < session.datetimeStart))
-        .sort((a, b) => b.entry.datetimeStart.getTime() - a.entry.datetimeStart.getTime())[0]?.log;
+    const sessions = sessionsQuery.data ?? [];
+    const previousFor = (exerciseId: number) => lastSessionLogs(exerciseId, sessions, session).at(-1);
+    // Set n of this cardio exercise last time, for comparing set by set
+    const previousCardio = (index: number, logs: LogEntryForm[]) => {
+        const exerciseId = logs[index].exercise!.id!;
+        const setNumber = logs.slice(0, index).filter(log => log.exercise?.id === exerciseId).length;
+        const previous = lastSessionLogs(exerciseId, sessions, session)[setNumber];
+        return previous ? cardioMetrics(previous).join(" · ") : "";
+    };
 
     const handleCallback = async (exercise: Exercise | null, formik: FormikProps<{
         logs: LogEntryForm[]
@@ -133,6 +216,7 @@ ${pendingSubstitution.current}`.trim() }));
                 // Empty the rest of the values, this is a new exercise not in the routine
                 return {
                     ...log,
+                    ...EMPTY_CARDIO_INPUT,
                     weight: '',
                     weightTarget: '',
                     repetitions: '',
@@ -164,6 +248,8 @@ ${pendingSubstitution.current}`.trim() }));
         for (const slot of dayData.slots) {
             for (const config of slot.setConfigs) {
                 for (let i = 0; i < config.nrOfSets; i++) {
+                    // Planned cardio values are targets only; the inputs start empty
+                    const prefill = !hasNoIterationData && !isCardioPlan(config.exercise, config.repetitionsUnitId);
 
                     initialValues.logs.push({
                         clientKey: `${dayData.iteration}-${config.slotEntryId}-${config.exerciseId}-${i}`,
@@ -172,14 +258,16 @@ ${pendingSubstitution.current}`.trim() }));
                         weightUnit: config.weightUnit!,
                         slotEntry: config.slotEntryId,
 
-                        rir: !hasNoIterationData && config.rir !== null ? config.rir : '',
+                        rir: prefill && config.rir !== null ? config.rir : '',
                         rirTarget: !hasNoIterationData && config.rir !== null ? config.rir : '',
-                        repetitions: !hasNoIterationData && config.repetitions !== null ? config.repetitions : '',
+                        repetitions: prefill && config.repetitions !== null ? config.repetitions : '',
                         repetitionsTarget: !hasNoIterationData && config.repetitions !== null ? config.repetitions : '',
-                        weight: !hasNoIterationData && config.weight !== null ? config.weight : '',
+                        weight: prefill && config.weight !== null ? config.weight : '',
                         weightTarget: !hasNoIterationData && config.weight !== null ? config.weight : '',
                         rest: '',
-                        restTarget: ''
+                        restTarget: '',
+                        ...EMPTY_CARDIO_INPUT,
+                        distanceUnitId: initialDistanceUnit(config.repetitionsUnitId ?? undefined),
                     });
                 }
             }
@@ -213,7 +301,7 @@ ${pendingSubstitution.current}`.trim() }));
                                                 {exerciseIdToSwap !== formik.values.logs[index].exercise!.id && <>
                                                     <Typography variant="h6">{formik.values.logs[index].exercise?.getTranslation(language).name}</Typography>
                                                     <ExerciseDemoLink exercise={formik.values.logs[index].exercise!} />
-                                                    {previousFor(formik.values.logs[index].exercise!.id!) && <Typography color="text.secondary">Previous: {previousFor(formik.values.logs[index].exercise!.id!)?.repetitions ?? "—"} reps × {previousFor(formik.values.logs[index].exercise!.id!)?.weight ?? "—"} {previousFor(formik.values.logs[index].exercise!.id!)?.weightUnitObj?.name ?? ""}</Typography>}
+                                                    {!isCardioRow(log) && previousFor(log.exercise!.id!) && <Typography color="text.secondary">Previous: {previousFor(log.exercise!.id!)?.repetitions ?? "—"} reps × {previousFor(log.exercise!.id!)?.weight ?? "—"} {previousFor(log.exercise!.id!)?.weightUnitObj?.name ?? ""}</Typography>}
                                                 </>}
 
                                                 {exerciseIdToSwap === formik.values.logs[index].exercise!.id &&
@@ -239,7 +327,9 @@ ${pendingSubstitution.current}`.trim() }));
                                                         rirTarget: formik.values.logs[index].rirTarget ?? "",
                                                         rest: formik.values.logs[index].rest ?? "",
                                                         restTarget: formik.values.logs[index].restTarget ?? "",
-                                                        slotEntry: null
+                                                        slotEntry: null,
+                                                        ...EMPTY_CARDIO_INPUT,
+                                                        distanceUnitId: formik.values.logs[index].distanceUnitId,
                                                     })}
                                                 >
                                                     <AddIcon />
@@ -273,6 +363,26 @@ ${pendingSubstitution.current}`.trim() }));
 
                                             </Grid>
                                         </>}
+                                        {isCardioRow(log) ? <>
+                                            {/* Plan and last time sit apart from the actual inputs and are never copied into them */}
+                                            <Grid size={12}>
+                                                {targetText(log) && <Typography variant="body2" color="text.secondary">Target: {targetText(log)}</Typography>}
+                                                {previousCardio(index, formik.values.logs) && <Typography variant="body2" color="text.secondary">Previous: {previousCardio(index, formik.values.logs)}</Typography>}
+                                            </Grid>
+                                            <CardioSetFields index={index} log={log} />
+                                            <Grid size={{ xs: 12, sm: 3 }}>
+                                                <TextField fullWidth select label={t('routines.rir')} variant="standard" {...formik.getFieldProps(`logs.${index}.rir`)}>
+                                                    {RIR_VALUES_SELECT.map((option) => (
+                                                        <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                                                    ))}
+                                                </TextField>
+                                            </Grid>
+                                            <Grid size={1}>
+                                                <IconButton size={"small"} aria-label="Remove set" onClick={() => remove(index)}>
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </Grid>
+                                        </> : <>
                                         <Grid size={4}>
                                             <WgerTextField
                                                 fieldName={`logs.${index}.repetitions`}
@@ -339,6 +449,7 @@ ${pendingSubstitution.current}`.trim() }));
                                                 <DeleteIcon />
                                             </IconButton>
                                         </Grid>
+                                        </>}
                                     </Grid>
                                 ))}
                             </>

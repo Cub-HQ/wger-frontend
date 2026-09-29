@@ -9,6 +9,7 @@ import React from 'react';
 import { TEST_INGREDIENT_1 } from "@/tests/ingredientTestdata";
 import { TEST_DIARY_ENTRY_1, TEST_DIARY_ENTRY_2 } from "@/tests/nutritionDiaryTestdata";
 import { testWorkoutLogs, testWorkoutSession } from "@/tests/workoutLogsRoutinesTestData";
+import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
 import { dateToLocale } from "@/core/lib/date";
 import { DayProps } from './CalendarComponent';
 import Entries from './Entries';
@@ -129,6 +130,22 @@ describe('Entries Component', () => {
         expect(screen.getByRole('region', { name: 'Squats' })).toBeInTheDocument();
         expect(screen.getByText(/^8 reps × 80 kg/)).toBeInTheDocument();
         expect(screen.getByText(/^8 reps × 82.5 kg/)).toBeInTheDocument();
+    });
+
+    test('Shows a cardio set with all its metrics on one calendar row', async () => {
+        const erg = new WorkoutLog({
+            ...testWorkoutLogs[0], id: 'erg', repetitionsUnitId: 3, repetitions: 1205, weightUnitId: 1, weight: null, rir: null,
+            distance: 4.35, distanceUnitId: 6, maxSpeed: 16.5, maxSpeedUnitId: 5, incline: 0, level: 6, calories: 260,
+        } as unknown as ConstructorParameters<typeof WorkoutLog>[0]);
+        render(
+            <QueryClientProvider client={testQueryClient}>
+                <Entries selectedDay={{ ...defaultProps, workoutSessions: [new WorkoutSession({ ...testWorkoutSession, logs: [erg] })] }} />
+            </QueryClientProvider>
+        );
+        await userEvent.setup().click(screen.getByText('routines.workoutSession'));
+
+        // Not "1205 reps": the seconds are a time, and the empty kg load is not shown
+        expect(screen.getByText('Time 00:20:05 · Distance 4.35 km · Max speed 16.5 km/h · Incline 0% · Level 6 · 260 kcal')).toBeInTheDocument();
     });
 
     test('Links the session to its lowercase locale route', async () => {
