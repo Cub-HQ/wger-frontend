@@ -1,16 +1,25 @@
-import { NameAutocompleter } from "@/components/Exercises";
+import { Exercise, NameAutocompleter } from "@/components/Exercises";
 import { postExerciseVideo } from "@/components/Exercises/api/video";
-import { Exercise } from "@/components/Exercises/models/exercise";
 import { addSession, editSession } from "@/components/Routines/api/session";
 import { addLogs } from "@/components/Routines/api/workoutLogs";
+import {
+    CardioInput,
+    cardioFieldsOf,
+    DISTANCE_UNIT_OPTIONS,
+    EMPTY_CARDIO_INPUT,
+    LIMITS,
+    validDecimal,
+    validDuration
+} from "@/components/Routines/models/cardio";
+import { cardioJson } from "@/components/Routines/models/WorkoutLog";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
-import { useFetchRoutineRepUnitsQuery, useFetchRoutineWeighUnitsQuery } from "@/components/Routines/queries/units";
-import { QueryKey } from "@/core/lib/consts";
+import { QueryKey, REP_UNIT_REPETITIONS, WEIGHT_UNIT_KG } from "@/core/lib/consts";
 import { makeHeader, makeLink, makeUrl, WgerLink } from "@/core/lib/url";
 import { useQueryClient } from "@tanstack/react-query";
-import { Alert, Box, Button, Card, CardContent, Divider, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import axios from "axios";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
 const TIMER_KEY = (id: string) => `wger.sessionTimer.${id}`;
@@ -94,37 +103,51 @@ export const ExerciseDemoLink = ({ exercise }: { exercise: Exercise }) => {
 
 export const QuickWorkout = () => {
     const { lang = "en" } = useParams();
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
-    const repUnits = useFetchRoutineRepUnitsQuery();
-    const weightUnits = useFetchRoutineWeighUnitsQuery();
     const [exercise, setExercise] = useState<Exercise | null>(null);
     const [name, setName] = useState("Quick workout");
     const [repetitions, setRepetitions] = useState("");
     const [weight, setWeight] = useState("");
-    const [durationSeconds, setDurationSeconds] = useState("");
-    const [distanceKm, setDistanceKm] = useState("");
-    const [maxSpeedKph, setMaxSpeedKph] = useState("");
-    const [averageSpeedKph, setAverageSpeedKph] = useState("");
-    const [paceSecondsPerKm, setPaceSecondsPerKm] = useState("");
-    const [inclinePercent, setInclinePercent] = useState("");
-    const [calories, setCalories] = useState("");
+    const [rir, setRir] = useState("");
+    const [cardio, setCardio] = useState<CardioInput>(EMPTY_CARDIO_INPUT);
+    const [averageSpeed, setAverageSpeed] = useState("");
+    const [pace, setPace] = useState("");
     const [saved, setSaved] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const cardioField = (field: keyof CardioInput) => ({
+        value: cardio[field],
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => setCardio({ ...cardio, [field]: event.target.value }),
+    });
+    const number = (text: string) => text.trim() === "" ? null : Number(text);
+    const invalid = !validDuration(cardio.time) || !validDecimal(cardio.distance, LIMITS.distance) || !validDecimal(cardio.maxSpeed, LIMITS.maxSpeed)
+        || !validDecimal(cardio.incline, LIMITS.incline) || !validDecimal(cardio.level, LIMITS.level) || !validDecimal(cardio.calories, LIMITS.calories)
+        || [repetitions, weight, rir, averageSpeed, pace].some(text => Number.isNaN(Number(text)));
     const save = async () => {
-        if (!exercise) return;
+        if (!exercise || invalid) return;
+        setError(null);
         const now = new Date();
-        const session = await addSession(new WorkoutSession({ id: null, dayId: null as unknown as number, routineId: null as unknown as number, notes: name, impression: "2", datetimeStart: now, datetimeEnd: null }));
-        const rep = repUnits.data?.find(unit => unit.name.toLowerCase() === "repetitions");
-        const seconds = repUnits.data?.find(unit => unit.name.toLowerCase() === "seconds");
-        const kilometers = repUnits.data?.find(unit => unit.name.toLowerCase() === "kilometers");
-        const kg = weightUnits.data?.find(unit => unit.name.toLowerCase() === "kg");
-        const kph = weightUnits.data?.find(unit => unit.name.toLowerCase() === "kilometers per hour");
-        const entries = [
-            { repetitions_unit: rep?.id, repetitions: repetitions === "" ? null : Number(repetitions), weight_unit: kg?.id, weight: weight === "" ? null : Number(weight), average_speed: null, pace: null, incline: null, calories: null },
-            { repetitions_unit: seconds?.id, repetitions: durationSeconds === "" ? null : Number(durationSeconds), weight_unit: null, weight: null, average_speed: null, pace: null, incline: null, calories: null },
-            { repetitions_unit: kilometers?.id, repetitions: distanceKm === "" ? null : Number(distanceKm), weight_unit: kph?.id, weight: maxSpeedKph === "" ? null : Number(maxSpeedKph), average_speed: averageSpeedKph === "" ? null : Number(averageSpeedKph), pace: paceSecondsPerKm === "" ? null : Number(paceSecondsPerKm), incline: inclinePercent === "" ? null : Number(inclinePercent), calories: calories === "" ? null : Number(calories) },
-        ].filter(entry => entry.repetitions !== null || entry.weight !== null || entry.average_speed !== null || entry.pace !== null || entry.incline !== null || entry.calories !== null);
-        await addLogs(entries.map(entry => ({ date: now.toISOString(), session: session.id, iteration: null, exercise: exercise.id!, day: null, routine: null, slot_entry: null, ...entry, rir: null })));
-        await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); setSaved(session.id);
+        // One performed set is one log holding all its metrics at once
+        const metrics = cardioFieldsOf(cardio, REP_UNIT_REPETITIONS, number(repetitions));
+        const entry = {
+            date: now.toISOString(), iteration: null, exercise: exercise.id!, day: null, routine: null, slot_entry: null,
+            repetitions_unit: REP_UNIT_REPETITIONS, repetitions: metrics.repetitions,
+            weight_unit: WEIGHT_UNIT_KG, weight: number(weight),
+            rir: number(rir),
+            ...cardioJson({ ...metrics, averageSpeed: number(averageSpeed), pace: number(pace) }),
+        };
+        if (Object.entries(entry).every(([key, value]) => ["date", "exercise", "repetitions_unit", "weight_unit", "distance_unit"].includes(key) || value === null)) {
+            setError("Enter at least one value.");
+            return;
+        }
+        try {
+            const session = await addSession(new WorkoutSession({ id: null, dayId: null as unknown as number, routineId: null as unknown as number, notes: name, impression: "2", datetimeStart: now, datetimeEnd: null }));
+            await addLogs([{ ...entry, session: session.id }]);
+            await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] });
+            setSaved(session.id);
+        } catch {
+            setError("Could not save the workout.");
+        }
     };
     if (saved) return <Box sx={{ p: 2 }}><Alert severity="success">Workout saved.</Alert><Button component={Link} to={makeLink(WgerLink.SESSION_DETAIL, lang, { id: saved })}>Open workout</Button></Box>;
     return <Box sx={{ maxWidth: 700, mx: "auto", p: 2 }}><Stack spacing={2}>
@@ -132,11 +155,33 @@ export const QuickWorkout = () => {
         <TextField label="Workout name" value={name} onChange={event => setName(event.target.value)} />
         <NameAutocompleter callback={setExercise} />
         {exercise && <ExerciseDemoLink exercise={exercise} />}
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}><TextField label="Reps" inputMode="decimal" value={repetitions} onChange={event => setRepetitions(event.target.value)} /><TextField label="Weight (kg)" inputMode="decimal" value={weight} onChange={event => setWeight(event.target.value)} /></Stack>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField label="Reps" inputMode="decimal" value={repetitions} onChange={event => setRepetitions(event.target.value)} />
+            <TextField label="Weight (kg)" inputMode="decimal" value={weight} onChange={event => setWeight(event.target.value)} />
+            <TextField label="RiR" inputMode="decimal" value={rir} onChange={event => setRir(event.target.value)} />
+        </Stack>
         <Typography variant="h6">Cardio / erg metrics</Typography>
-        <Typography variant="caption">Time, distance, speed, pace, incline and calories are stored as structured workout data.</Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}><TextField label="Time (seconds)" value={durationSeconds} onChange={event => setDurationSeconds(event.target.value)} /><TextField label="Distance (km)" value={distanceKm} onChange={event => setDistanceKm(event.target.value)} /><TextField label="Max speed (kph)" value={maxSpeedKph} onChange={event => setMaxSpeedKph(event.target.value)} /></Stack>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}><TextField label="Average speed (kph)" value={averageSpeedKph} onChange={event => setAverageSpeedKph(event.target.value)} /><TextField label="Pace (seconds/km)" value={paceSecondsPerKm} onChange={event => setPaceSecondsPerKm(event.target.value)} /><TextField label="Incline (%)" value={inclinePercent} onChange={event => setInclinePercent(event.target.value)} /><TextField label="Calories" value={calories} onChange={event => setCalories(event.target.value)} /></Stack>
-        <Button variant="contained" disabled={!exercise} onClick={save}>Save workout</Button>
+        <Typography variant="caption">All metrics are saved together on this one set.</Typography>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField label={t('routines.cardioTime')} placeholder="00:00:00" inputMode="numeric" error={!validDuration(cardio.time)} {...cardioField("time")} />
+            <Stack direction="row" spacing={1}>
+                <TextField label={t('routines.cardioDistance')} inputMode="decimal" error={!validDecimal(cardio.distance, LIMITS.distance)} {...cardioField("distance")} />
+                <TextField select label={t('unit')} sx={{ minWidth: 80 }} value={cardio.distanceUnitId} onChange={event => setCardio({ ...cardio, distanceUnitId: Number(event.target.value) })}>
+                    {DISTANCE_UNIT_OPTIONS.map(option => <MenuItem key={option.id} value={option.id}>{option.label}</MenuItem>)}
+                </TextField>
+            </Stack>
+            <TextField label={t('routines.cardioMaxSpeed')} inputMode="decimal" error={!validDecimal(cardio.maxSpeed, LIMITS.maxSpeed)} {...cardioField("maxSpeed")} />
+        </Stack>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField label={t('routines.cardioIncline')} inputMode="decimal" error={!validDecimal(cardio.incline, LIMITS.incline)} {...cardioField("incline")} />
+            <TextField label={t('routines.cardioLevel')} inputMode="decimal" error={!validDecimal(cardio.level, LIMITS.level)} {...cardioField("level")} />
+            <TextField label={t('routines.cardioCalories')} inputMode="decimal" error={!validDecimal(cardio.calories, LIMITS.calories)} {...cardioField("calories")} />
+        </Stack>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField label="Average speed (kph)" inputMode="decimal" value={averageSpeed} onChange={event => setAverageSpeed(event.target.value)} />
+            <TextField label="Pace (seconds/km)" inputMode="decimal" value={pace} onChange={event => setPace(event.target.value)} />
+        </Stack>
+        {error && <Alert severity="error">{error}</Alert>}
+        <Button variant="contained" disabled={!exercise || invalid} onClick={save}>Save workout</Button>
     </Stack></Box>;
 };

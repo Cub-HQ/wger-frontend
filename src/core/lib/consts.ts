@@ -8,11 +8,22 @@ export const ENGLISH_LANGUAGE_OBJ = new Language(ENGLISH_LANGUAGE_ID, ENGLISH_LA
 export const MIN_ACCOUNT_AGE = MIN_ACCOUNT_AGE_TO_TRUST || 21;
 
 
+// Fixture rows of the server, see wger/core/fixtures/setting_*_units.json
 export const REP_UNIT_REPETITIONS = 1;
 export const REP_UNIT_TILL_FAILURE = 2;
+export const REP_UNIT_SECONDS = 3;
+export const REP_UNIT_MINUTES = 4;
+export const REP_UNIT_MILES = 5;
+export const REP_UNIT_KILOMETERS = 6;
+export const REP_UNIT_METERS = 8;
 
 export const WEIGHT_UNIT_KG = 1;
 export const WEIGHT_UNIT_LB = 2;
+// Speeds share the weight unit table, they are never a load
+export const WEIGHT_UNIT_KMH = 5;
+export const WEIGHT_UNIT_MPH = 6;
+
+export const EXERCISE_CATEGORY_CARDIO = 15;
 
 
 /*

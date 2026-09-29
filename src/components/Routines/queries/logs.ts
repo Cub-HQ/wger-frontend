@@ -28,10 +28,13 @@ export function useEditRoutineLogQuery(routineId: number) {
 
     return useMutation({
         mutationFn: (log: WorkoutLog) => editLog(log),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_LOGS, routineId] });
-            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_STATS, routineId] });
-        }
+        // The routine's log page, its stats and the calendar's sessions all show this log
+        onSuccess: () => Promise.all([
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_LOGS, routineId] }),
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_LOG_DATA, routineId] }),
+            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_STATS, routineId] }),
+            queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }),
+        ])
     });
 }
 

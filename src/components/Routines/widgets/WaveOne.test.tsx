@@ -102,6 +102,28 @@ describe('SessionSummary', () => {
         expect(routine.requested.every(([, enabled]) => enabled === false)).toBe(true);
         expect(within(screen.getByRole('region', { name: 'Squats' })).queryByText(/Target/)).toBeNull();
     });
+
+    test('A cardio set shows all its metrics on one row, apart from the time target', () => {
+        const rower = new Exercise({ ...testExerciseSquats, id: 1093, translations: [] } as unknown as ConstructorParameters<typeof Exercise>[0]);
+        // Planned 20 s; done 2:05, which two-decimal minutes can't hold, so it sits in duration
+        routine.config = new SetConfigData({ exerciseId: 1093, slotEntryId: 30, type: 'normal', nrOfSets: 1, repetitions: 20, repetitionsUnitId: 3, repetitionsRounding: null, weightUnitId: 1, weightRounding: null, restTime: 30, textRepr: '', comment: '' });
+        const row = new WorkoutLog({
+            ...set('cardio', rower, 1, 0, 0), repetitions: null, repetitionsUnitId: 4, weight: 12.5, weightUnitId: 1,
+            duration: 125, distance: 0.5, distanceUnitId: 6, maxSpeed: 14.2, maxSpeedUnitId: 5, incline: 0, level: 6, calories: 31.5,
+        });
+        // Older rows kept the max speed in weight; one in mph gets a marked km/h reading
+        const legacy = new WorkoutLog({ ...set('cardio', rower, 2, 0, 0), repetitions: 10, repetitionsUnitId: 4, weight: 8.5, weightUnitId: 6 });
+        const session = new WorkoutSession({ ...testWorkoutSession, id: 'cardio', logs: [row, legacy] });
+        render(<SessionSummary session={session} sessions={[session]} />);
+
+        const card = screen.getByRole('region', { name: 'Unknown exercise' });
+        expect(within(card).getByText('Target: 1 set × 00:00:20, 30s rest between sets')).toBeInTheDocument();
+        expect(within(card).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+            // The kg load stays a load, the max speed is its own km/h value; zero incline is shown
+            'Set 1Load 12.5 · Time 00:02:05 · Distance 0.5 km · Max speed 14.2 km/h · Incline 0% · Level 6 · 31.5 kcal',
+            'Set 2Time 00:10:00 · Max speed 8.5 mph (≈13.7 km/h)',
+        ]);
+    });
 });
 
 describe('SessionDetail', () => {

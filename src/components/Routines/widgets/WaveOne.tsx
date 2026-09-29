@@ -2,7 +2,8 @@ import EditIcon from "@mui/icons-material/Edit";
 import { Box, Button, Card, CardActionArea, CardContent, Chip, CircularProgress, Divider, Stack, TextField, Typography } from "@mui/material";
 import { addLogs } from "@/components/Routines/api/workoutLogs";
 import { SetConfigData } from "@/components/Routines/models/SetConfigData";
-import { WorkoutLog } from "@/components/Routines/models/WorkoutLog";
+import { cardioJson, WorkoutLog } from "@/components/Routines/models/WorkoutLog";
+import { cardioMetrics, isLegacySpeed, isMetricPrimary, lastSessionLogs, primaryText } from "@/components/Routines/models/cardio";
 import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
 import { useRoutineDetailQuery } from "@/components/Routines/queries/routines";
 import { useFetchRoutineRepUnitsQuery, useFetchRoutineWeighUnitsQuery } from "@/components/Routines/queries/units";
@@ -17,26 +18,20 @@ import { makeLink, WgerLink } from "@/core/lib/url";
 import { ExerciseDemoLink, SessionMetadataEditor, SessionTimer } from "@/components/Routines/widgets/WaveThree";
 
 const withDate = (log: WorkoutLog, date: Date) => Object.assign(Object.create(Object.getPrototypeOf(log)), log, { date: new Date(date.getTime()) }) as WorkoutLog;
-const present = (value: number | null) => value !== null && value !== undefined;
-const number = (value: number | null) => value === null ? "—" : Number.isInteger(value) ? value.toString() : value.toFixed(1);
-const duration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainder = Math.floor(seconds % 60);
-    return [hours, minutes, remainder].map(value => value.toString().padStart(2, "0")).join(":");
-};
-export const workoutMetrics = (log: WorkoutLog, repetitionUnit = "", weightUnit = "") => {
-    const measure = repetitionUnit.trim().toLowerCase();
+// Shown as stored, up to the two decimals the server keeps; never rounded to one
+const number = (value: number | null) => value === null ? "—" : Number(value.toFixed(2)).toString();
+
+// "6 reps × 50 kg" for strength; every cardio metric of the set next to it
+export const workoutMetrics = (log: WorkoutLog, weightUnit = "") => {
     const load = weightUnit.trim();
-    const metrics: string[] = [];
-    if (present(log.repetitions)) {
-        if (measure === "seconds") metrics.push(`Time ${duration(log.repetitions!)}`);
-        else if (measure === "kilometers" || measure === "kilometres") metrics.push(`Distance ${number(log.repetitions)} km`);
-        else if (present(log.weight) && !load.toLowerCase().includes("hour")) return [`${number(log.repetitions)} reps × ${number(log.weight)}${load ? ` ${load}` : ""}`];
-        else metrics.push(`${number(log.repetitions)} reps`);
-    }
-    if (present(log.weight)) metrics.push(`${load.toLowerCase().includes("hour") ? "Speed" : "Load"} ${number(log.weight)}${load ? ` ${load}` : ""}`);
-    return metrics;
+    const reps = log.repetitions != null && !isMetricPrimary(log.repetitionUnitId) ? log.repetitions : null;
+    // A legacy speed in weight is a speed and shows as Max speed, never as a load
+    const weight = isLegacySpeed(log) ? null : log.weight ?? null;
+    const unit = load ? ` ${load}` : "";
+    const strength = reps !== null && weight !== null
+        ? [`${number(reps)} reps × ${number(weight)}${unit}`]
+        : [...(reps !== null ? [`${number(reps)} reps`] : []), ...(weight !== null ? [`Load ${number(weight)}${unit}`] : [])];
+    return [...strength, ...cardioMetrics(log)];
 };
 const sessionName = (session: WorkoutSession) => {
     const sourceTitle = session.notes?.match(/^Original source title:\s*(.+)$/im)?.[1]?.trim();
@@ -45,12 +40,7 @@ const sessionName = (session: WorkoutSession) => {
 
 const previousLogs = (log: WorkoutLog, sessions: WorkoutSession[]) => {
     const current = sessions.find(session => session.id === log.sessionId);
-    if (!current) return [];
-    return sessions
-        .filter(session => session.datetimeStart < current.datetimeStart && session.logs.some(entry => entry.exerciseId === log.exerciseId))
-        .sort((a, b) => b.datetimeStart.getTime() - a.datetimeStart.getTime())[0]
-        ?.logs.filter(entry => entry.exerciseId === log.exerciseId)
-        .sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0)) ?? [];
+    return current ? lastSessionLogs(log.exerciseId, sessions, current) : [];
 };
 
 export const SetSummary = ({ log, sessions }: { log: WorkoutLog, sessions: WorkoutSession[] }) => {
@@ -58,15 +48,16 @@ export const SetSummary = ({ log, sessions }: { log: WorkoutLog, sessions: Worko
     const repetitionUnits = useFetchRoutineRepUnitsQuery();
     const weightUnit = log.weightUnitObj?.name ?? weightUnits.data?.find(item => item.id === log.weightUnitId)?.name ?? "";
     const repetitionUnit = log.repetitionUnitObj?.name ?? repetitionUnits.data?.find(item => item.id === log.repetitionUnitId)?.name ?? "";
-    const metrics = workoutMetrics(log, repetitionUnit, weightUnit);
+    const metrics = workoutMetrics(log, weightUnit);
     const prior = previousLogs(log, sessions);
     const index = Math.max(0, [...(sessions.find(session => session.id === log.sessionId)?.logs ?? [])]
         .filter(entry => entry.exerciseId === log.exerciseId)
         .sort((a, b) => (a.iteration ?? 0) - (b.iteration ?? 0))
         .findIndex(entry => entry.id === log.id));
     const previous = prior[index] ?? prior.at(-1);
-    const loadDelta = previous?.weight != null && log.weight != null ? log.weight - previous.weight : null;
-    const measureDelta = previous?.repetitions != null && log.repetitions != null ? log.repetitions - previous.repetitions : null;
+    // Only like with like: the same load unit and the same kind of primary measure
+    const loadDelta = previous?.weight != null && log.weight != null && previous.weightUnitId === log.weightUnitId && !isLegacySpeed(log) ? log.weight - previous.weight : null;
+    const measureDelta = previous?.repetitions != null && log.repetitions != null && previous.repetitionUnitId === log.repetitionUnitId ? log.repetitions - previous.repetitions : null;
     const delta = loadDelta !== null && loadDelta !== 0
         ? { value: loadDelta, unit: weightUnit }
         : measureDelta !== null && measureDelta !== 0 ? { value: measureDelta, unit: repetitionUnit || "reps" } : null;
@@ -125,8 +116,13 @@ const range = (low: number | null, high: number | null) => low === null ? null :
 
 // What the routine asked for, e.g. "4 sets × 8, 90s rest between sets"
 export const prescription = (config: SetConfigData) => {
-    const reps = range(config.repetitions, config.maxRepetitions);
-    const unit = config.repetitionsUnit && !/repetition/i.test(config.repetitionsUnit.name) ? ` ${config.repetitionsUnit.name.toLowerCase()}` : "";
+    const unitId = config.repetitionsUnitId;
+    // A time or distance target reads as "00:00:20" or "0.5 km"
+    const metric = (value: number | null) => value === null ? null : primaryText(value, unitId);
+    const reps = isMetricPrimary(unitId)
+        ? metric(config.repetitions) && (config.maxRepetitions !== null && config.maxRepetitions !== config.repetitions ? `${metric(config.repetitions)}–${metric(config.maxRepetitions)}` : metric(config.repetitions))
+        : range(config.repetitions, config.maxRepetitions);
+    const unit = !isMetricPrimary(unitId) && config.repetitionsUnit && !/repetition/i.test(config.repetitionsUnit.name) ? ` ${config.repetitionsUnit.name.toLowerCase()}` : "";
     const rest = range(config.restTime, config.maxRestTime);
     const sets = `${range(config.nrOfSets, config.maxNrOfSets)} ${config.nrOfSets === 1 && config.maxNrOfSets === null ? "set" : "sets"}`;
     return `${sets}${reps ? ` × ${reps}${unit}` : ""}${rest ? `, ${rest}s rest between sets` : ""}`;
@@ -195,7 +191,7 @@ export const SessionDetail = () => {
     const addSet = async (last: WorkoutLog) => {
         setAdding(true);
         try {
-            await addLogs([{ date: session.datetimeStart.toISOString(), iteration: last.iteration, exercise: last.exerciseId, session: session.id, routine: session.routineId, slot_entry: last.slotEntryId, repetitions_unit: last.repetitionUnitId, repetitions: last.repetitions, weight_unit: last.weightUnitId, weight: last.weight, rir: last.rir, rest: last.restTime }]);
+            await addLogs([{ date: session.datetimeStart.toISOString(), iteration: last.iteration, exercise: last.exerciseId, session: session.id, routine: session.routineId, slot_entry: last.slotEntryId, repetitions_unit: last.repetitionUnitId, repetitions: last.repetitions, weight_unit: last.weightUnitId, weight: last.weight, rir: last.rir, rest: last.restTime, ...cardioJson(last) }]);
             await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] });
         } finally { setAdding(false); }
     };
