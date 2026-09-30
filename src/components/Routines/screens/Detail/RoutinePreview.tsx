@@ -82,7 +82,7 @@ const PreviewDay = ({ dayData, showLabel, exerciseNames }: {
                             // eslint-disable-next-line @eslint-react/no-array-index-key
                             <Box key={configIndex} sx={{ mb: 0.5 }}>
                                 {(configIndex === 0 || config.exerciseId !== slot.setConfigs[configIndex - 1].exerciseId) &&
-                                    <Typography variant="h6">{exerciseNames[config.exerciseId] ?? `Exercise #${config.exerciseId}`}</Typography>}
+                                    <Typography variant="h6">{exerciseNames[config.exerciseId] || `Exercise #${config.exerciseId}`}</Typography>}
                                 <div>
                                     {config.textRepr}
                                     {config.isSpecialType &&

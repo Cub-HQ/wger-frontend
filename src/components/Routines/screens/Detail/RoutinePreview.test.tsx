@@ -28,7 +28,8 @@ const payload = {
     external_version: 'nath-v3',
     expires_at: '2099-01-01T00:00:00Z',
     canonical_proposal: { routine: { name: '12wk Strength', description: 'Proposal notes' } },
-    exercise_names: { 2: 'Bench press', 3: 'Row' },
+    // The backend sends '' for an exercise without a translation
+    exercise_names: { 2: 'Bench press', 3: '' },
     schedule: [
         {
             iteration: 1, date: '2026-10-05', label: 'Block 1', day: lower, slots: [
@@ -80,7 +81,7 @@ describe('RoutinePreview', () => {
         expect(within(week1).getByText('4 Sets, 8-10 × 60 kg @ 1.5 RiR 180s rest')).toBeInTheDocument();
         expect(within(week1).getByText('Superset')).toBeInTheDocument();
         expect(within(week1).getByText('Bench press')).toBeInTheDocument();
-        expect(within(week1).getByText('Row')).toBeInTheDocument();
+        expect(within(week1).getByText('Exercise #3')).toBeInTheDocument();
         expect(within(week1).getByText('Pair these')).toBeInTheDocument();
         expect(within(week1).getByText('Pause at the bottom')).toBeInTheDocument();
         expect(within(week1).getByText(/routines.restDay/)).toBeInTheDocument();
