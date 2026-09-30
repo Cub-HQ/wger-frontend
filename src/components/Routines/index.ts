@@ -8,6 +8,7 @@ export { RoutineAdd } from "./screens/Detail/RoutineAdd";
 export { RoutineDetail } from "./screens/Detail/RoutineDetail";
 export { RoutineDetailsTable } from "./screens/Detail/RoutineDetailsTable";
 export { RoutineEdit } from "./screens/Detail/RoutineEdit";
+export { RoutinePreview } from "./screens/Detail/RoutinePreview";
 export { SessionAdd } from "./screens/Detail/SessionAdd";
 export { SlotProgressionEdit } from "./screens/Detail/SlotProgressionEdit";
 export { TemplateDetail } from "./screens/Detail/TemplateDetail";
