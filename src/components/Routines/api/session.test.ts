@@ -265,4 +265,37 @@ describe("Session service tests", () => {
         });
         expect(result.notes).toBe("edited");
     });
+
+    test('an older server without time_unknown reads as known timing', async () => {
+        (axios.get as Mock).mockResolvedValue({ data: { results: [
+            { id: SESSION_UUID, routine: 1, day: 5, notes: null, impression: "3", datetime_start: "2025-08-07T20:10:00+02:00", datetime_end: null },
+            { id: SESSION_UUID_2, routine: 1, day: 5, notes: null, impression: "3", datetime_start: "2025-08-07T06:00:00+10:00", datetime_end: "2025-08-07T06:00:00+10:00", time_unknown: true },
+        ] } });
+
+        const [known, unknown] = await searchSessions({ routine: 1 });
+
+        expect(known.timeUnknown).toBe(false);
+        expect(unknown.timeUnknown).toBe(true);
+        // The date anchor is kept, but never shown as a time or a zero duration
+        expect(unknown.datetimeEnd).not.toBeNull();
+        expect(unknown.textRepresentation).toContain('Time/duration unknown');
+        expect(unknown.textRepresentation).not.toMatch(/\d{2}:\d{2}/);
+    });
+
+    test('editing a session with unknown timing sends notes but never the date anchors', async () => {
+        (axios.patch as Mock).mockResolvedValue({ data: {
+            id: SESSION_UUID, routine: 39764, day: 5, notes: "edited", impression: "3",
+            datetime_start: "2025-08-07T06:00:00+10:00", datetime_end: "2025-08-07T06:00:00+10:00", time_unknown: true,
+        } });
+        const anchor = new Date("2025-08-07T06:00:00+10:00");
+
+        const result = await editSession(new WorkoutSession({
+            id: SESSION_UUID, routineId: 39764, dayId: 5, notes: "edited", impression: "3",
+            datetimeStart: anchor, datetimeEnd: anchor, timeUnknown: true,
+        }));
+
+        const [, body] = (axios.patch as Mock).mock.calls[0];
+        expect(body).toEqual({ id: SESSION_UUID, routine: 39764, day: 5, notes: "edited", impression: "3" });
+        expect(result.timeUnknown).toBe(true);
+    });
 });

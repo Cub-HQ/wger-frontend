@@ -9,6 +9,8 @@ export const IMPRESSION_BAD = '1' as const;
 export const IMPRESSION_NEUTRAL = '2' as const;
 export const IMPRESSION_GOOD = '3' as const;
 
+export const TIME_UNKNOWN_LABEL = 'Time/duration unknown' as const;
+
 interface WorkoutSessionParams {
     id: string | null;
     dayId: number;
@@ -19,6 +21,8 @@ interface WorkoutSessionParams {
     impression: string;
     dayObj?: Day;
     logs?: WorkoutLog[];
+    // Imported without a reliable time: start/end only anchor the date, they are no measurement
+    timeUnknown?: boolean;
 }
 
 export class WorkoutSession {
@@ -32,6 +36,7 @@ export class WorkoutSession {
     impression: string;
     dayObj?: Day;
     logs: WorkoutLog[] = [];
+    timeUnknown: boolean;
 
     constructor(params: WorkoutSessionParams) {
         this.id = params.id;
@@ -45,10 +50,11 @@ export class WorkoutSession {
             this.dayObj = params.dayObj;
         }
         this.logs = params.logs ?? [];
+        this.timeUnknown = params.timeUnknown ?? false;
     }
 
     static clone(session: WorkoutSession, overrides: Partial<WorkoutSessionParams>) {
-        return new WorkoutSession({ id: overrides.id ?? session.id, dayId: overrides.dayId ?? session.dayId, routineId: overrides.routineId ?? session.routineId, datetimeStart: overrides.datetimeStart ?? session.datetimeStart, datetimeEnd: overrides.datetimeEnd !== undefined ? overrides.datetimeEnd : session.datetimeEnd, notes: overrides.notes !== undefined ? overrides.notes : session.notes, impression: overrides.impression ?? session.impression, dayObj: overrides.dayObj ?? session.dayObj, logs: overrides.logs ?? session.logs });
+        return new WorkoutSession({ id: overrides.id ?? session.id, dayId: overrides.dayId ?? session.dayId, routineId: overrides.routineId ?? session.routineId, datetimeStart: overrides.datetimeStart ?? session.datetimeStart, datetimeEnd: overrides.datetimeEnd !== undefined ? overrides.datetimeEnd : session.datetimeEnd, notes: overrides.notes !== undefined ? overrides.notes : session.notes, impression: overrides.impression ?? session.impression, dayObj: overrides.dayObj ?? session.dayObj, logs: overrides.logs ?? session.logs, timeUnknown: overrides.timeUnknown ?? session.timeUnknown });
     }
 
     // get the impression as a translated string
@@ -71,9 +77,11 @@ export class WorkoutSession {
 
     get textRepresentation(): string {
         const format = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const time = this.datetimeEnd
-            ? `${format(this.datetimeStart)} - ${format(this.datetimeEnd)} /`
-            : `${format(this.datetimeStart)} /`;
+        const time = this.timeUnknown
+            ? `${TIME_UNKNOWN_LABEL} /`
+            : this.datetimeEnd
+                ? `${format(this.datetimeStart)} - ${format(this.datetimeEnd)} /`
+                : `${format(this.datetimeStart)} /`;
 
         const notes = this.notes ?? "";
 
@@ -94,19 +102,25 @@ export class WorkoutSessionAdapter implements Adapter<WorkoutSession> {
         notes: item.notes !== undefined ? item.notes : null,
         impression: item.impression!,
         dayObj: item.dayObj,
-        logs: item.logs
+        logs: item.logs,
+        // Older servers don't send it
+        timeUnknown: item.time_unknown === true,
     });
 
 
+    // time_unknown is read-only on the server. Its anchors are never sent, the
+    // server refuses changed timing on such a session and edits keep the flag
     toJson = (item: WorkoutSession) => ({
         ...(item.id != null ? { id: item.id } : {}),
         day: item.dayId,
         routine: item.routineId,
         notes: item.notes,
         impression: item.impression,
-        // eslint-disable-next-line camelcase
-        datetime_start: item.datetimeStart.toISOString(),
-        // eslint-disable-next-line camelcase
-        datetime_end: item.datetimeEnd ? item.datetimeEnd.toISOString() : null,
+        ...(item.timeUnknown ? {} : {
+            // eslint-disable-next-line camelcase
+            datetime_start: item.datetimeStart.toISOString(),
+            // eslint-disable-next-line camelcase
+            datetime_end: item.datetimeEnd ? item.datetimeEnd.toISOString() : null,
+        }),
     });
 }

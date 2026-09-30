@@ -40,6 +40,7 @@ export { SlotEntry } from "./models/SlotEntry";
 export { WeightUnit, WeightUnitAdapter } from "./models/WeightUnit";
 export { WorkoutLog, WorkoutLogAdapter } from "./models/WorkoutLog";
 export {
+    TIME_UNKNOWN_LABEL,
     WorkoutSession,
     WorkoutSessionAdapter,
 } from "./models/WorkoutSession";

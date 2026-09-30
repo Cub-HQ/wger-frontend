@@ -4,7 +4,7 @@ import { addLogs } from "@/components/Routines/api/workoutLogs";
 import { SetConfigData } from "@/components/Routines/models/SetConfigData";
 import { cardioJson, WorkoutLog } from "@/components/Routines/models/WorkoutLog";
 import { cardioMetrics, isLegacySpeed, isMetricPrimary, lastSessionLogs, primaryText } from "@/components/Routines/models/cardio";
-import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
+import { TIME_UNKNOWN_LABEL, WorkoutSession } from "@/components/Routines/models/WorkoutSession";
 import { useRoutineDetailQuery } from "@/components/Routines/queries/routines";
 import { useFetchRoutineRepUnitsQuery, useFetchRoutineWeighUnitsQuery } from "@/components/Routines/queries/units";
 import { useSessionsQuery } from "@/components/Routines/queries/sessions";
@@ -98,7 +98,7 @@ export const WorkoutsOverview = () => {
                         <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2 }}>
                             <Box>
                                 <Typography variant="h6">{sessionName(session)}</Typography>
-                                <Typography color="text.secondary">{dateToLocale(session.datetimeStart)} · {session.logs.length} entries</Typography>
+                                <Typography color="text.secondary">{dateToLocale(session.datetimeStart)}{session.timeUnknown && ` · ${TIME_UNKNOWN_LABEL}`} · {session.logs.length} entries</Typography>
                             </Box>
                             <Typography color="text.secondary">View</Typography>
                         </Stack>
@@ -197,7 +197,7 @@ export const SessionDetail = () => {
     };
     return <Box sx={{ maxWidth: 1100, mx: "auto", p: 2 }}>
         <Typography variant="h4">{sessionName(session)}</Typography>
-        <Typography color="text.secondary" sx={{ mb: 2 }}>{dateToLocale(session.datetimeStart)} · stable session {session.id}</Typography>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>{dateToLocale(session.datetimeStart)}{session.timeUnknown && ` · ${TIME_UNKNOWN_LABEL}`} · stable session {session.id}</Typography>
         <SessionTimer session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
         <SessionMetadataEditor session={session} onSaved={async () => { await queryClient.invalidateQueries({ queryKey: [QueryKey.SESSIONS_FULL] }); }} />
         <Button startIcon={<EditIcon />} href="#edit" variant="contained" sx={{ mb: 2 }}>Edit workout sets</Button>
