@@ -52,7 +52,7 @@ export const RoutineDetailsCard = () => {
                 }
                 <Stack spacing={2} sx={{ mt: 2 }}>
                     {routineQuery.data!.daysCurrentIteration.map(({ day, dayData }) =>
-                        <DayDetailsCard routineId={routineId} day={day} dayData={dayData} key={day.id} />
+                        <DayDetailsCard routineId={routineId} day={day} dayData={dayData} key={day.id} readOnly={routineQuery.data!.deletedAt !== null} />
                     )}
                 </Stack>
             </>}

@@ -1,8 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from "@testing-library/user-event";
 import { downloadRoutineSpreadsheet } from "@/components/Routines/api/routine";
-import { useDeleteRoutineQuery } from "@/components/Routines/queries";
 import { RoutineDetailDropdown } from "@/components/Routines/widgets/RoutineDetailDropdown";
 import React from 'react';
 import { MemoryRouter } from "react-router-dom";
@@ -17,14 +16,10 @@ vi.mock("@/components/Routines/api/routine");
 describe("Test the RoutineDetailDropdown component", () => {
 
     let user: ReturnType<typeof userEvent.setup>;
-    let deleteMutateAsync: Mock;
 
     beforeEach(() => {
         user = userEvent.setup();
         vi.resetAllMocks();
-
-        deleteMutateAsync = vi.fn().mockResolvedValue(204);
-        (useDeleteRoutineQuery as Mock).mockReturnValue({ mutateAsync: deleteMutateAsync });
     });
 
     const renderAndOpenMenu = async (routine: Routine) => {
@@ -37,6 +32,18 @@ describe("Test the RoutineDetailDropdown component", () => {
         );
         await user.click(screen.getByRole('button'));
     };
+
+    test('a trashed routine offers history and exports, never edits', async () => {
+        await renderAndOpenMenu(Object.assign(new Routine(), testRoutine1, { deletedAt: new Date('2026-09-30T10:00:00Z') }));
+
+        const items = screen.getAllByRole('menuitem').map(item => item.textContent);
+        expect(items).toContain('routines.logsOverview');
+        expect(items).toContain('routines.downloadPdfLogs');
+        expect(items).toContain('Previous versions and Trash');
+        for (const writeOrPlan of ['edit', 'routines.markAsTemplate', 'routines.downloadIcal', 'Move to Trash']) {
+            expect(items).not.toContain(writeOrPlan);
+        }
+    });
 
     test('shows the log and stats entries for a regular routine', async () => {
 
@@ -60,36 +67,6 @@ describe("Test the RoutineDetailDropdown component", () => {
         expect(screen.getByText('edit')).toBeInTheDocument();
     });
 
-    test('deleting asks for confirmation before calling the mutation', async () => {
-
-        // Act
-        await renderAndOpenMenu(testRoutine1);
-        await user.click(screen.getByText('delete'));
-
-        // Assert - the dialog is open, but nothing was deleted yet
-        expect(await screen.findByRole('dialog')).toBeInTheDocument();
-        expect(deleteMutateAsync).not.toHaveBeenCalled();
-
-        // Act - confirm
-        const dialog = screen.getByRole('dialog');
-        await user.click(within(dialog).getByRole('button', { name: 'delete' }));
-
-        // Assert
-        await waitFor(() => expect(deleteMutateAsync).toHaveBeenCalledTimes(1));
-    });
-
-    test('cancelling the delete dialog does not delete the routine', async () => {
-
-        // Act
-        await renderAndOpenMenu(testRoutine1);
-        await user.click(screen.getByText('delete'));
-        const dialog = await screen.findByRole('dialog');
-        await user.click(within(dialog).getByRole('button', { name: 'cancel' }));
-
-        // Assert
-        expect(deleteMutateAsync).not.toHaveBeenCalled();
-    });
-
     test('mark as template opens the template form', async () => {
 
         // Act
@@ -99,7 +76,6 @@ describe("Test the RoutineDetailDropdown component", () => {
         // Assert
         const dialog = await screen.findByRole('dialog');
         expect(within(dialog).getByText('routines.markAsTemplate')).toBeInTheDocument();
-        expect(deleteMutateAsync).not.toHaveBeenCalled();
     });
 
     test('spreadsheet downloads go through the authenticated API and report failures', async () => {

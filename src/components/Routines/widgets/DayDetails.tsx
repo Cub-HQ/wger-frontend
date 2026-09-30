@@ -207,7 +207,7 @@ const useSlotDeletion = (day: Day, routineId: number) => {
         }
     };
 
-    return { openSnackbar, handleCloseSnackbar, handleDeleteSlot };
+    return { openSnackbar, handleCloseSnackbar, handleDeleteSlot, deleteSlotQuery };
 };
 
 
@@ -301,7 +301,7 @@ export const DayDetails = (props: {
     const [showAutocompleterForSlot, setShowAutocompleterForSlot] = useState<number | null>(null);
     const [simpleMode, setSimpleMode] = useState(true);
 
-    const { openSnackbar, handleCloseSnackbar, handleDeleteSlot } = useSlotDeletion(props.day, props.routineId);
+    const { openSnackbar, handleCloseSnackbar, handleDeleteSlot, deleteSlotQuery } = useSlotDeletion(props.day, props.routineId);
 
     const handleAddSlotEntry = (slotId: number) => {
         const slot = props.day.slots.find(s => s.id === slotId);
@@ -379,6 +379,7 @@ export const DayDetails = (props: {
         <FormQueryErrorsSnackbar mutationQuery={editSlotOrderQuery} />
         <FormQueryErrorsSnackbar mutationQuery={addSlotQuery} />
         <FormQueryErrorsSnackbar mutationQuery={addSlotEntryQuery} />
+        <FormQueryErrorsSnackbar mutationQuery={deleteSlotQuery} />
         <DayForm
             routineId={props.routineId}
             day={props.day}

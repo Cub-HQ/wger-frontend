@@ -53,6 +53,24 @@ describe("Smoke tests the RoutineDetail component", () => {
         expect(screen.getByText('Every day is leg day 🦵🏻')).toBeInTheDocument();
         expect(screen.getByText('Squats')).toBeInTheDocument();
         expect(screen.getByText('4 Sets, 5 x 20 @ 2Rir')).toBeInTheDocument();
+        expect(screen.getAllByLabelText('routines.addWeightLog').length).toBeGreaterThan(0);
+    });
+
+    test('a trashed routine is shown read-only', async () => {
+        (getRoutine as Mock).mockResolvedValue(Object.assign(new Routine(), testRoutine1, { deletedAt: new Date('2026-09-30T10:00:00Z') }));
+        render(
+            <QueryClientProvider client={getTestQueryClient()}>
+                <MemoryRouter initialEntries={['/test/101']}>
+                    <Routes>
+                        <Route path="/test/:routineId" element={<RoutineDetail />} />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        expect(await screen.findByText(/This routine is in Trash since .* and is read-only/)).toBeInTheDocument();
+        expect(screen.getByText('Every day is leg day 🦵🏻')).toBeInTheDocument();
+        expect(screen.queryByLabelText('routines.addWeightLog')).toBeNull();
     });
 
     test('renders chip for templates', async () => {

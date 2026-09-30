@@ -207,15 +207,6 @@ export const editRoutine = async (routine: Routine): Promise<Routine> => {
     return Routine.fromJson(response.data);
 };
 
-export const deleteRoutine = async (id: number): Promise<number> => {
-    const response = await axios.delete(
-        makeUrl(ApiPath.ROUTINE, { id: id }),
-        { headers: makeHeader() }
-    );
-
-    return response.status;
-};
-
 
 export const getRoutineDayDataAllIterations = async (routineId: number): Promise<RoutineDayData[]> => {
     const response = await axios.get(

@@ -14,12 +14,14 @@ import {
 } from "@mui/material";
 import { downloadRoutineSpreadsheet } from "@/components/Routines/api/routine";
 import { Routine } from "@/components/Routines/models/Routine";
-import { useDeleteRoutineQuery } from "@/components/Routines/queries";
+import { getRoutineRevision, recoveryFailure } from "@/components/Routines/api/routineRecovery";
+import { useTrashRoutineQuery } from "@/components/Routines/queries/routineRecovery";
 import { RoutineTemplateForm } from "@/components/Routines/widgets/forms/RoutineTemplateForm";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { makeLink, WgerLink } from "@/core/lib/url";
+import { randomUUID } from "@/core/lib/uuid";
 
 
 export enum DialogToOpen {
@@ -31,19 +33,27 @@ export enum DialogToOpen {
 export const RoutineDetailDropdown = (props: { routine: Routine }) => {
 
     const navigate = useNavigate();
-    const useDeleteQuery = useDeleteRoutineQuery(props.routine.id!);
+    const trashQuery = useTrashRoutineQuery(props.routine.id!);
 
     const [t, i18n] = useTranslation();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [deleteConfirmationOpen, setConfirmationOpen] = useState<DialogToOpen>(DialogToOpen.NONE);
     const [downloadFailed, setDownloadFailed] = useState(false);
+    const [trashError, setTrashError] = useState('');
+    // Kept for a retry after a network failure, so the server can't trash twice
+    const trashAttempt = useRef<{ revision: string, key: string } | null>(null);
+    const inFlight = useRef(false);
 
+    // A trashed routine is read-only until restored: the server refuses writes with 409 routine_trashed
+    const trashed = props.routine.deletedAt !== null;
     const open = Boolean(anchorEl);
     const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         setAnchorEl(event.currentTarget);
     };
 
     const handleDelete = () => {
+        trashAttempt.current = null;
+        setTrashError('');
         setConfirmationOpen(DialogToOpen.DELETE_CONFIRMATION);
         handleClose(); // Close the dropdown menu
     };
@@ -54,11 +64,33 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
     };
 
     const handleConfirmDelete = async () => {
-        await useDeleteQuery.mutateAsync();
-        navigate(makeLink(WgerLink.ROUTINE_OVERVIEW, i18n.language));
+        if (inFlight.current) return;
+        inFlight.current = true;
+        setTrashError('');
+        try {
+            // Fresh revision: a plan changed elsewhere since this page loaded is refused (409)
+            trashAttempt.current ??= { revision: await getRoutineRevision(props.routine.id!), key: randomUUID() };
+            const receipt = await trashQuery.mutateAsync(trashAttempt.current);
+            navigate(makeLink(WgerLink.ROUTINE_OVERVIEW, i18n.language), { state: { trashed: { ...receipt, name: props.routine.name } } });
+        } catch (e) {
+            const failure = recoveryFailure(e);
+            if (failure.kind !== 'retry') trashAttempt.current = null;
+            setTrashError({
+                conflict: failure.code === 'routine_trashed'
+                    ? 'This routine is already in Trash.'
+                    : 'This routine changed while this was open. Nothing was moved. Try again.',
+                expired: 'This routine is no longer available.',
+                notFound: 'You can only move your own routines to Trash.',
+                invalid: failure.detail ?? 'The server refused this. Nothing was moved.',
+                retry: 'Could not reach the server. Try again; retrying never trashes twice.',
+            }[failure.kind]);
+        } finally {
+            inFlight.current = false;
+        }
     };
 
     const handleCloseDialogs = () => {
+        if (inFlight.current) return;
         setConfirmationOpen(DialogToOpen.NONE);
     };
 
@@ -92,11 +124,11 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                 open={open}
                 onClose={handleClose}
             >
-                <MenuItem
+                {!trashed && <MenuItem
                     // disabled={props.routine.isTemplate}
                     onClick={navigateEdit}>
                     {t("edit")}
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem
                     component={Link}
                     to={makeLink(WgerLink.ROUTINE_DETAIL_TABLE, i18n.language, { id: props.routine.id! })}>
@@ -118,9 +150,9 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                 >
                     {t("routines.duplicate")}
                 </MenuItem>
-                <MenuItem onClick={handleTemplate}>
+                {!trashed && <MenuItem onClick={handleTemplate}>
                     {t("routines.markAsTemplate")}
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem
                     component="a"
                     href={makeLink(WgerLink.ROUTINE_PDF_TABLE, i18n.language, { id: props.routine.id! })}
@@ -133,12 +165,12 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                     download={`Routine-${props.routine.id}-logs.pdf`}>
                     {t("routines.downloadPdfLogs")}
                 </MenuItem>
-                <MenuItem
+                {!trashed && <MenuItem
                     component="a"
                     href={makeLink(WgerLink.ROUTINE_ICAL, i18n.language, { id: props.routine.id! })}
                     download={`Routine-${props.routine.id}-calendar.ics`}>
                     {t("routines.downloadIcal")}
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem onClick={() => {
                     handleClose();
                     downloadRoutineSpreadsheet('csv', props.routine.id!).catch(() => setDownloadFailed(true));
@@ -152,7 +184,10 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                     {t("routines.spreadsheet.downloadXlsx")}
                 </MenuItem>
                 <Divider />
-                <MenuItem onClick={handleDelete}>{t("delete")}</MenuItem>
+                <MenuItem component="a" href={`${makeLink(WgerLink.ROUTINE_OVERVIEW, i18n.language)}#trash`}>
+                    Previous versions and Trash
+                </MenuItem>
+                {!trashed && <MenuItem onClick={handleDelete}>Move to Trash</MenuItem>}
             </Menu>
 
             <Snackbar open={downloadFailed} onClose={() => setDownloadFailed(false)}>
@@ -164,21 +199,24 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
             <Dialog
                 open={deleteConfirmationOpen === DialogToOpen.DELETE_CONFIRMATION}
                 onClose={handleCloseDialogs}
+                aria-labelledby="alert-dialog-title"
             >
                 <DialogTitle id="alert-dialog-title">
-                    {t('delete')}
+                    Move to Trash?
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText id="alert-dialog-description">
-                        {t('deleteConfirmation', { name: props.routine.name })}
+                        {props.routine.name || t('routines.routine')} leaves your active routines and calendar.
+                        You can undo or restore it from Trash for 14 days. Logged workouts stay in your history.
                     </DialogContentText>
+                    {trashError && <Alert severity="error" sx={{ mt: 2 }}>{trashError}</Alert>}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseDialogs}>
+                    <Button onClick={handleCloseDialogs} disabled={trashQuery.isPending}>
                         {t("cancel")}
                     </Button>
-                    <Button onClick={handleConfirmDelete} color="error" autoFocus>
-                        {t("delete")}
+                    <Button onClick={handleConfirmDelete} color="error" autoFocus disabled={trashQuery.isPending}>
+                        {trashQuery.isPending ? 'Moving…' : trashError && trashAttempt.current ? 'Try again' : 'Move to Trash'}
                     </Button>
                 </DialogActions>
             </Dialog>

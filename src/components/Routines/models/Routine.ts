@@ -25,6 +25,8 @@ type RoutineConstructorParams = {
     fitInWeek?: boolean;
     isTemplate?: boolean;
     isPublic?: boolean;
+    // Set while the routine is in Trash (owner reads only)
+    deletedAt?: Date | null;
 
     days?: Day[];
     dayData?: RoutineDayData[];
@@ -40,6 +42,7 @@ export class Routine {
     fitInWeek: boolean = true;
     isTemplate: boolean = false;
     isPublic: boolean = false;
+    deletedAt: Date | null = null;
 
     days: Day[] = [];
     dayData: RoutineDayData[] = [];
@@ -247,6 +250,7 @@ class RoutineAdapter implements Adapter<Routine> {
             fitInWeek: item.fit_in_week,
             isTemplate: item.is_template,
             isPublic: item.is_public,
+            deletedAt: item.deleted_at ? new Date(item.deleted_at) : null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             days: item.days ? item.days.map((day: any) => Day.fromJson(day)) : []
         });

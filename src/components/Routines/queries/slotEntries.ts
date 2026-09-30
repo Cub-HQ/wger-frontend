@@ -27,6 +27,7 @@ export const useDeleteSlotEntryQuery = (routineId: number) => {
 
     return useMutation({
         mutationFn: (slotId: number) => deleteSlotEntry(slotId),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, routineId] })
+        // Also on failure: a refused delete (e.g. the item has logged workouts) must show the item again
+        onSettled: () => queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, routineId] })
     });
 };
