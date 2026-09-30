@@ -7,8 +7,10 @@ import { Routine } from "@/components/Routines/models/Routine";
 import { AddRoutineFab } from "@/components/Routines/screens/Overview/Fab";
 import { useRoutinesShallowQuery } from "@/components/Routines/queries";
 import { RoutineImportDialog } from "@/components/Routines/widgets/RoutineImportDialog";
+import { JustTrashed, RoutineTrash } from "@/components/Routines/widgets/RoutineTrash";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { dateToLocale } from "@/core/lib/date";
 import { makeLink, WgerLink } from "@/core/lib/url";
 
@@ -56,6 +58,7 @@ export const RoutineOverview = () => {
     const routineQuery = useRoutinesShallowQuery();
     const [t] = useTranslation();
     const [importOpen, setImportOpen] = useState(false);
+    const justTrashed = (useLocation().state as { trashed?: JustTrashed } | null)?.trashed;
 
     if (routineQuery.isLoading) {
         return <LoadingPlaceholder />;
@@ -65,7 +68,8 @@ export const RoutineOverview = () => {
     return <WgerContainerRightSidebar
         title={t("routines.routines")}
         mainContent={<>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
+                <Button size="small" href="#trash">Trash</Button>
                 <Button variant="outlined" size="small" onClick={() => setImportOpen(true)}>
                     {t("routines.spreadsheet.import")}
                 </Button>
@@ -77,6 +81,7 @@ export const RoutineOverview = () => {
                         {routineQuery.data!.map(r => <RoutineList routine={r} key={r.id} />)}
                     </List>
                 </Paper>}
+            <RoutineTrash justTrashed={justTrashed} />
             <RoutineImportDialog
                 open={importOpen}
                 onClose={() => setImportOpen(false)}

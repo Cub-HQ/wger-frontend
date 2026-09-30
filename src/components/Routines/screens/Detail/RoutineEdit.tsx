@@ -9,6 +9,7 @@ import { DayDetails, DayDragAndDropGrid } from "@/components/Routines/widgets/Da
 import { RoutineForm } from "@/components/Routines/widgets/forms/RoutineForm";
 import { RoutineTemplateForm } from "@/components/Routines/widgets/forms/RoutineTemplateForm";
 import { RoutineDetailsCard } from "@/components/Routines/widgets/RoutineDetailsCard";
+import { RoutineTrash } from "@/components/Routines/widgets/RoutineTrash";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -89,6 +90,9 @@ export const RoutineEdit = () => {
                 <RoutineTable routine={routineQuery.data!} />
             </Box>
         </Stack>}
+
+        {/* Every saved change keeps the version before it for 14 days */}
+        <RoutineTrash routineId={routineId} />
     </WgerContainerFullWidth>;
 };
 

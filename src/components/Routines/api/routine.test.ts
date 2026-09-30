@@ -2,7 +2,6 @@ import { getExercisesByIds } from "@/components/Exercises/api/exercise";
 import { Exercise } from "@/components/Exercises/models/exercise";
 import {
     addRoutine,
-    deleteRoutine,
     editRoutine,
     getActiveRoutine,
     getPrivateTemplatesShallow,
@@ -276,19 +275,6 @@ describe("workout routine service tests", () => {
         expect(url).toMatch(/\/api\/v2\/routine\/42\/$/);
         expect(body.name).toBe('Edited');
         expect(result.id).toBe(42);
-    });
-
-    test('deleteRoutine DELETEs and returns the response status', async () => {
-        (axios.delete as Mock).mockResolvedValue({ status: 204 });
-
-        const result = await deleteRoutine(13);
-
-        expect(axios.delete).toHaveBeenCalledTimes(1);
-        expect(axios.delete).toHaveBeenCalledWith(
-            expect.stringMatching(/\/api\/v2\/routine\/13\/$/),
-            expect.anything()
-        );
-        expect(result).toBe(204);
     });
 
     test('getRoutineStructure hits the structure endpoint and parses days', async () => {

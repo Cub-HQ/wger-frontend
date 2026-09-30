@@ -37,6 +37,7 @@ export const useDeleteDayQuery = (routineId: number) => {
 
     return useMutation({
         mutationFn: (id: number) => deleteDay(id),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, routineId] })
+        // Also on failure: a refused delete (e.g. the item has logged workouts) must show the item again
+        onSettled: () => queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, routineId] })
     });
 };

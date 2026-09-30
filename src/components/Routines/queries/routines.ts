@@ -1,7 +1,6 @@
 import {
     addRoutine,
     confirmRoutineImport,
-    deleteRoutine,
     editRoutine,
     getActiveRoutine,
     getPrivateTemplatesShallow,
@@ -106,18 +105,6 @@ export const useEditRoutineQuery = (routineId: number) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_OVERVIEW] });
             queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, routineId] });
-        }
-    });
-};
-
-export const useDeleteRoutineQuery = (id: number) => {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: () => deleteRoutine(id),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_OVERVIEW] });
-            queryClient.invalidateQueries({ queryKey: [QueryKey.ROUTINE_DETAIL, id] });
         }
     });
 };

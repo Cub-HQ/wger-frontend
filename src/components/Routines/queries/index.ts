@@ -3,7 +3,6 @@ export {
     useRoutineDetailQuery,
     useActiveRoutineQuery,
     useRoutinesShallowQuery,
-    useDeleteRoutineQuery,
     usePublicRoutinesShallowQuery,
     usePrivateRoutinesShallowQuery,
     useRoutineLogData
