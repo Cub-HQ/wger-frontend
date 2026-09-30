@@ -34,8 +34,9 @@ const failureMessage = (error: unknown) => {
     const failure = recoveryFailure(error);
     switch (failure.kind) {
         case 'conflict':
+            // stale_revision: changed while the dialog was open. restore_conflict: a later change must be undone first
             return failure.code === 'stale_revision'
-                ? 'The routine was changed after this. Nothing was restored. Undo the newer change first, then try again.'
+                ? 'The routine changed while this was open. Nothing was restored. Try again.'
                 : `${failure.detail ?? 'This conflicts with the current routine.'} Nothing was restored.`;
         case 'expired':
             return 'This can no longer be restored: its 14 days have passed. Your logged workouts are not affected.';
@@ -86,9 +87,8 @@ export const RoutineTrash = ({ justTrashed, routineId }: { justTrashed?: JustTra
         return () => window.removeEventListener('hashchange', reveal);
     }, []);
 
-    const restore = async (pending: Pending) => {
-        if (inFlight.current) return;
-        inFlight.current = true;
+    // Callers hold the inFlight lock
+    const send = async (pending: Pending) => {
         setError('');
         setMessage('');
         try {
@@ -101,28 +101,38 @@ export const RoutineTrash = ({ justTrashed, routineId }: { justTrashed?: JustTra
         } catch (e) {
             setError(failureMessage(e));
             if (recoveryFailure(e).kind === 'retry') {
-                // Same key on retry, the server returns the original receipt if it was applied
+                // Same revision and key on retry, the server returns the original receipt if it was applied
                 setConfirm(pending);
             } else {
                 setConfirm(null);
                 void recoveries.refetch();
             }
+        }
+    };
+
+    const restore = async (pending: Pending) => {
+        if (inFlight.current) return;
+        inFlight.current = true;
+        try {
+            await send(pending);
         } finally {
             inFlight.current = false;
         }
     };
 
-    // The revision is fetched fresh for every action, so a stale view can't overwrite later edits
+    // The revision is fetched fresh for every action, so a stale view can't overwrite later edits.
+    // Locked from the first click, so clicks during the revision GET can't start a second action.
     const prepare = async (target: Target, direct: boolean) => {
         if (inFlight.current) return;
+        inFlight.current = true;
         setError('');
         setMessage('');
         setPreparing(target.recoveryId);
         try {
             const pending = { ...target, revision: await getRoutineRevision(target.routineId), key: randomUUID() };
+            setPreparing(null);
             if (direct) {
-                setPreparing(null);
-                await restore(pending);
+                await send(pending);
             } else {
                 setConfirm(pending);
             }
@@ -130,6 +140,7 @@ export const RoutineTrash = ({ justTrashed, routineId }: { justTrashed?: JustTra
             setError(failureMessage(e));
         } finally {
             setPreparing(null);
+            inFlight.current = false;
         }
     };
 
@@ -185,7 +196,7 @@ export const RoutineTrash = ({ justTrashed, routineId }: { justTrashed?: JustTra
                 <DialogContentText>
                     {confirm && (confirm.operation === 'trash'
                         ? `${confirm.name} returns to your active routines and calendar.`
-                        : `${confirm.name} goes back to this earlier plan. Your current plan is kept as a previous version for 14 days.`)}
+                        : `${confirm.name} goes back to this earlier plan and replaces the current one.`)}
                     {' '}Logged workouts are not changed.
                 </DialogContentText>
                 {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}

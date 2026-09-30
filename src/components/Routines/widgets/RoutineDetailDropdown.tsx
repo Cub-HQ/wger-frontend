@@ -44,6 +44,8 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
     const trashAttempt = useRef<{ revision: string, key: string } | null>(null);
     const inFlight = useRef(false);
 
+    // A trashed routine is read-only until restored: the server refuses writes with 409 routine_trashed
+    const trashed = props.routine.deletedAt !== null;
     const open = Boolean(anchorEl);
     const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         setAnchorEl(event.currentTarget);
@@ -76,7 +78,7 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
             setTrashError({
                 conflict: failure.code === 'routine_trashed'
                     ? 'This routine is already in Trash.'
-                    : 'This routine changed since you opened it. Nothing was moved. Reload the page and try again.',
+                    : 'This routine changed while this was open. Nothing was moved. Try again.',
                 expired: 'This routine is no longer available.',
                 notFound: 'You can only move your own routines to Trash.',
                 invalid: failure.detail ?? 'The server refused this. Nothing was moved.',
@@ -122,11 +124,11 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                 open={open}
                 onClose={handleClose}
             >
-                <MenuItem
+                {!trashed && <MenuItem
                     // disabled={props.routine.isTemplate}
                     onClick={navigateEdit}>
                     {t("edit")}
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem
                     component={Link}
                     to={makeLink(WgerLink.ROUTINE_DETAIL_TABLE, i18n.language, { id: props.routine.id! })}>
@@ -148,9 +150,9 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                 >
                     {t("routines.duplicate")}
                 </MenuItem>
-                <MenuItem onClick={handleTemplate}>
+                {!trashed && <MenuItem onClick={handleTemplate}>
                     {t("routines.markAsTemplate")}
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem
                     component="a"
                     href={makeLink(WgerLink.ROUTINE_PDF_TABLE, i18n.language, { id: props.routine.id! })}
@@ -163,12 +165,12 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                     download={`Routine-${props.routine.id}-logs.pdf`}>
                     {t("routines.downloadPdfLogs")}
                 </MenuItem>
-                <MenuItem
+                {!trashed && <MenuItem
                     component="a"
                     href={makeLink(WgerLink.ROUTINE_ICAL, i18n.language, { id: props.routine.id! })}
                     download={`Routine-${props.routine.id}-calendar.ics`}>
                     {t("routines.downloadIcal")}
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem onClick={() => {
                     handleClose();
                     downloadRoutineSpreadsheet('csv', props.routine.id!).catch(() => setDownloadFailed(true));
@@ -185,7 +187,7 @@ export const RoutineDetailDropdown = (props: { routine: Routine }) => {
                 <MenuItem component="a" href={`${makeLink(WgerLink.ROUTINE_OVERVIEW, i18n.language)}#trash`}>
                     Previous versions and Trash
                 </MenuItem>
-                {props.routine.deletedAt === null && <MenuItem onClick={handleDelete}>Move to Trash</MenuItem>}
+                {!trashed && <MenuItem onClick={handleDelete}>Move to Trash</MenuItem>}
             </Menu>
 
             <Snackbar open={downloadFailed} onClose={() => setDownloadFailed(false)}>

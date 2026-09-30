@@ -33,6 +33,18 @@ describe("Test the RoutineDetailDropdown component", () => {
         await user.click(screen.getByRole('button'));
     };
 
+    test('a trashed routine offers history and exports, never edits', async () => {
+        await renderAndOpenMenu(Object.assign(new Routine(), testRoutine1, { deletedAt: new Date('2026-09-30T10:00:00Z') }));
+
+        const items = screen.getAllByRole('menuitem').map(item => item.textContent);
+        expect(items).toContain('routines.logsOverview');
+        expect(items).toContain('routines.downloadPdfLogs');
+        expect(items).toContain('Previous versions and Trash');
+        for (const writeOrPlan of ['edit', 'routines.markAsTemplate', 'routines.downloadIcal', 'Move to Trash']) {
+            expect(items).not.toContain(writeOrPlan);
+        }
+    });
+
     test('shows the log and stats entries for a regular routine', async () => {
 
         // Act

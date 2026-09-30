@@ -74,8 +74,9 @@ export const RoutineDetail = () => {
                             severity="warning"
                             action={<Button color="inherit" size="small" href={`${makeLink(WgerLink.ROUTINE_OVERVIEW, i18n.language)}#trash`}>Trash</Button>}
                         >
-                            This routine is in Trash since {dateToLocale(routine!.deletedAt)}. It is not planned any more;
-                            its logged workouts stay in your history. Restore it from Trash within 14 days.
+                            This routine is in Trash since {dateToLocale(routine!.deletedAt)} and is read-only. It is not
+                            planned any more; its logged workouts stay in your history. Restore it from Trash within 14 days
+                            to plan or edit it again.
                         </Alert>}
 
                         {routine!.description !== ''
@@ -95,7 +96,7 @@ export const RoutineDetail = () => {
                                 day={day}
                                 dayData={dayData}
                                 key={`dayDetails-${day.id}`}
-                                readOnly={routine!.isTemplate}
+                                readOnly={routine!.isTemplate || routine!.deletedAt !== null}
                             />
                         )}
 

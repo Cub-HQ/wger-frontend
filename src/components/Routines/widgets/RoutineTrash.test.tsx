@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import axios from 'axios';
@@ -58,6 +58,9 @@ const show = (initialPath: string) => {
     </QueryClientProvider>);
 };
 
+// Several clicks before React re-renders (and disables the buttons), as fast double clicks can
+const clickBeforeRender = (...targets: HTMLElement[]) => act(() => { targets.forEach(target => target.click()); });
+
 const confirmTrash = async () => {
     fireEvent.click(screen.getByRole('button'));
     fireEvent.click(await screen.findByText('Move to Trash'));
@@ -66,6 +69,9 @@ const confirmTrash = async () => {
     expect(within(dialog).getByText(/Logged workouts stay in your history/)).toBeInTheDocument();
     return dialog;
 };
+
+// These flows render the whole overview; on a busy machine that outlasts the 1 s default wait
+configure({ asyncUtilTimeout: 5000 });
 
 describe('routine trash and recovery', () => {
     test('trash never hard-deletes, sends revision + key, then offers Undo on the overview', async () => {
@@ -108,13 +114,14 @@ describe('routine trash and recovery', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }));
         expect(await within(dialog).findByText(/retrying never trashes twice/)).toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
-        expect(await within(dialog).findByText(/changed since you opened it/)).toBeInTheDocument();
+        expect(await within(dialog).findByText(/changed while this was open/)).toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }));
         await waitFor(() => expect(axios.post).toHaveBeenCalledTimes(3));
 
-        const keys = vi.mocked(axios.post).mock.calls.map(([, body]) => (body as { idempotency_key: string }).idempotency_key);
-        expect(keys[1]).toBe(keys[0]);
-        expect(keys[2]).not.toBe(keys[0]);
+        const calls = vi.mocked(axios.post).mock.calls;
+        // Lost response: the exact same request again, so the server can replay its receipt
+        expect(calls[1].slice(0, 2)).toEqual(calls[0].slice(0, 2));
+        expect((calls[2][1] as { idempotency_key: string }).idempotency_key).not.toBe((calls[0][1] as { idempotency_key: string }).idempotency_key);
         // A new attempt after a conflict fetches a fresh revision
         expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).endsWith('/routine/1/revision/'))).toHaveLength(2);
     });
@@ -126,6 +133,21 @@ describe('routine trash and recovery', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(axios.post).not.toHaveBeenCalled();
         expect(axios.delete).not.toHaveBeenCalled();
+    });
+
+    test('clicks while the revision is still loading start one trash only', async () => {
+        const revision = Promise.withResolvers<{ data: { routine_id: number, revision: string } }>();
+        const lists = vi.mocked(axios.get).getMockImplementation()!;
+        vi.mocked(axios.get).mockImplementation(async (url: string) => url.endsWith('/revision/') ? revision.promise : lists(url));
+        vi.mocked(axios.post).mockResolvedValue({ data: receipt });
+        show('/en/routine/1/view');
+        const dialog = await confirmTrash();
+        const button = within(dialog).getByRole('button', { name: 'Move to Trash' });
+        clickBeforeRender(button, button, button);
+        await act(async () => { revision.resolve({ data: { routine_id: 1, revision: 'r1' } }); });
+        await screen.findByRole('button', { name: 'Undo' });
+        expect(axios.post).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).endsWith('/revision/'))).toHaveLength(1);
     });
 
     test('a double click sends one trash request', async () => {
@@ -163,24 +185,91 @@ describe('routine trash and recovery', () => {
         const edit = await screen.findByRole('article', { name: /Push pull/ });
         fireEvent.click(within(edit).getByRole('button', { name: 'Restore' }));
         const dialog = await screen.findByRole('dialog', { name: 'Restore earlier version?' });
-        expect(within(dialog).getByText(/current plan is kept as a previous version for 14 days/)).toBeInTheDocument();
+        // Restore has no redo in the contract, so the dialog promises none
+        expect(within(dialog).getByText('Push pull goes back to this earlier plan and replaces the current one. Logged workouts are not changed.')).toBeInTheDocument();
         expect(axios.post).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog).getByRole('button', { name: 'Restore' }));
         expect(await within(dialog).findByText(/retrying never restores twice/)).toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
-        expect(await screen.findByText(/Nothing was restored. Undo the newer change first/)).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-        const [first, second] = vi.mocked(axios.post).mock.calls.map(([, body]) => body as { idempotency_key: string, expected_revision: string });
-        expect(second.idempotency_key).toBe(first.idempotency_key);
+        expect(screen.getByText('The routine changed while this was open. Nothing was restored. Try again.')).toBeInTheDocument();
+        const calls = vi.mocked(axios.post).mock.calls;
+        expect(calls[1].slice(0, 2)).toEqual(calls[0].slice(0, 2));
+        const first = calls[0][1] as { idempotency_key: string, expected_revision: string };
         expect(first.expected_revision).toBe('r1');
 
         fireEvent.click(within(screen.getByRole('article', { name: /Push pull/ })).getByRole('button', { name: 'Restore' }));
         const again = await screen.findByRole('dialog');
         fireEvent.click(within(again).getByRole('button', { name: 'Restore' }));
-        expect(await screen.findByText(/its 14 days have passed. Your logged workouts are not affected/)).toBeInTheDocument();
+        expect((await screen.findAllByText(/its 14 days have passed. Your logged workouts are not affected/))[0]).toBeInTheDocument();
         const third = vi.mocked(axios.post).mock.calls[2][1] as { idempotency_key: string };
         expect(third.idempotency_key).not.toBe(first.idempotency_key);
+    });
+
+    test('a later change blocking a restore (restore_conflict) shows the server reason', async () => {
+        vi.mocked(axios.post).mockRejectedValueOnce(httpError(409, { detail: 'The plan changed after this operation; undo the newer change first.', code: 'restore_conflict' }));
+        show('/en/routine/overview');
+        fireEvent.click(within(await screen.findByRole('article', { name: /Push pull/ })).getByRole('button', { name: 'Restore' }));
+        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Restore' }));
+        expect((await screen.findAllByText('The plan changed after this operation; undo the newer change first. Nothing was restored.'))[0]).toBeInTheDocument();
+    });
+
+    test('clicks during a slow revision load open one restore; out-of-order loads cannot start a second', async () => {
+        recoveries = [edited, { ...edited, recovery_id: 'rec-edit-2', routine_id: 7, routine_name: 'Legs' }];
+        const slow = { 5: Promise.withResolvers<object>(), 7: Promise.withResolvers<object>() };
+        vi.mocked(axios.get).mockImplementation(async (url: string) => {
+            if (url.includes('/routine/recoveries/')) return { data: { count: recoveries.length, next: null, previous: null, results: recoveries } };
+            const id = Number(/\/routine\/(\d+)\/revision\/$/.exec(url)?.[1]) as 5 | 7;
+            if (slow[id]) return slow[id].promise;
+            return { data: { count: active.length, next: null, previous: null, results: active } };
+        });
+        vi.mocked(axios.post)
+            .mockRejectedValueOnce(new axios.AxiosError('Network Error'))
+            .mockResolvedValueOnce({ data: { routine_id: 5, revision: 'r9', restored_from: 'rec-edit', recovery_id: 'rec-r', expires_at: trashed.expires_at } });
+        show('/en/routine/overview');
+        const push = within(await screen.findByRole('article', { name: /Push pull/ })).getByRole('button', { name: 'Restore' });
+        const legs = within(screen.getByRole('article', { name: /Legs/ })).getByRole('button', { name: 'Restore' });
+        clickBeforeRender(push, push, legs);
+        // The second routine's revision would arrive first; it was never requested
+        await act(async () => { slow[7].resolve({ data: { routine_id: 7, revision: 'r-legs' } }); });
+        await act(async () => { slow[5].resolve({ data: { routine_id: 5, revision: 'r-push' } }); });
+
+        const dialog = await screen.findByRole('dialog', { name: 'Restore earlier version?' });
+        expect(within(dialog).getByText(/^Push pull goes back/)).toBeInTheDocument();
+        expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).includes('/revision/')).map(([url]) => String(url).replace(/^.*\/routine\//, '')))
+            .toEqual(['5/revision/']);
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Restore' }));
+        const retry = await within(dialog).findByRole('button', { name: 'Try again' });
+        clickBeforeRender(retry, retry);
+        expect(await screen.findByText('Push pull was restored to the earlier version.')).toBeInTheDocument();
+        const calls = vi.mocked(axios.post).mock.calls;
+        expect(calls).toHaveLength(2);
+        expect(calls[1].slice(0, 2)).toEqual(calls[0].slice(0, 2));
+        expect(calls[0][0]).toMatch(/\/routine\/recoveries\/rec-edit\/restore\/$/);
+        expect(calls[0][1]).toEqual({ expected_revision: 'r-push', idempotency_key: expect.any(String) });
+    });
+
+    test('Undo clicked repeatedly while its revision loads restores once', async () => {
+        const revision = Promise.withResolvers<object>();
+        vi.mocked(axios.get).mockImplementation(async (url: string) => {
+            if (url.includes('/revision/')) return revision.promise;
+            if (url.includes('/routine/recoveries/')) return { data: { count: 0, next: null, previous: null, results: [] } };
+            return { data: { count: 0, next: null, previous: null, results: [] } };
+        });
+        vi.mocked(axios.post).mockResolvedValue({ data: { routine_id: 1, revision: 'r3', restored_from: 'rec-trash', recovery_id: 'rec-r', expires_at: trashed.expires_at } });
+        client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+        render(<QueryClientProvider client={client}>
+            <MemoryRouter initialEntries={[{ pathname: '/en/routine/overview', state: { trashed: { ...receipt, name: 'Test routine 1' } } }]}>
+                <Routes><Route path="/:lang/routine/overview" element={<RoutineOverview />} /></Routes>
+            </MemoryRouter>
+        </QueryClientProvider>);
+        const undo = await screen.findByRole('button', { name: 'Undo' });
+        clickBeforeRender(undo, undo);
+        await act(async () => { revision.resolve({ data: { routine_id: 1, revision: 'r2' } }); });
+        expect(await screen.findByText('Test routine 1 is back in your routines.')).toBeInTheDocument();
+        expect(axios.post).toHaveBeenCalledTimes(1);
     });
 
     test('a foreign or unknown recovery (404) is refused without leaking details', async () => {
@@ -188,7 +277,7 @@ describe('routine trash and recovery', () => {
         show('/en/routine/overview');
         fireEvent.click(within(await screen.findByRole('article', { name: /Push pull/ })).getByRole('button', { name: 'Restore' }));
         fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Restore' }));
-        expect(await screen.findByText('This is not available to restore. You can only restore your own routines.')).toBeInTheDocument();
+        expect((await screen.findAllByText('This is not available to restore. You can only restore your own routines.'))[0]).toBeInTheDocument();
     });
 
     test('restoring a rebuild checks the revision of the replacement routine', async () => {

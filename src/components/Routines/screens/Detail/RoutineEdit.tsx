@@ -1,4 +1,4 @@
-import { Box, Divider, Stack, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Button, Divider, Stack, Typography, useTheme } from "@mui/material";
 import Grid from '@mui/material/Grid';
 import { LoadingPlaceholder } from "@/core/ui/LoadingWidget/LoadingWidget";
 import { WgerContainerFullWidth } from "@/core/ui/Widgets/Container";
@@ -45,7 +45,15 @@ export const RoutineEdit = () => {
         title={t('editName', { name: routine.name })}
         backToUrl={makeLink(WgerLink.ROUTINE_DETAIL, i18n.language, { id: routineId })}
     >
-        <Grid container spacing={2}>
+        {/* A trashed routine is read-only until restored: the server refuses writes with 409 routine_trashed */}
+        {routine.deletedAt !== null && <Alert
+            severity="warning"
+            action={<Button color="inherit" size="small" href={`${makeLink(WgerLink.ROUTINE_OVERVIEW, i18n.language)}#trash`}>Trash</Button>}
+        >
+            This routine is in Trash and can't be edited. Restore it from Trash first.
+        </Alert>}
+
+        {routine.deletedAt === null && <Grid container spacing={2}>
 
             <Grid size={routine.isTemplate ? 8 : 12}>
                 <RoutineForm existingRoutine={routine} />
@@ -74,7 +82,7 @@ export const RoutineEdit = () => {
                     </Box>
                 </Grid>
             </>}
-        </Grid>
+        </Grid>}
 
 
         {routineQuery.data!.days.length > 0 && <Stack spacing={2} sx={{ mt: 2 }}>
