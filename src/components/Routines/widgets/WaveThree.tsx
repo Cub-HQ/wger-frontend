@@ -12,7 +12,7 @@ import {
     validDuration
 } from "@/components/Routines/models/cardio";
 import { cardioJson } from "@/components/Routines/models/WorkoutLog";
-import { WorkoutSession } from "@/components/Routines/models/WorkoutSession";
+import { TIME_UNKNOWN_LABEL, WorkoutSession } from "@/components/Routines/models/WorkoutSession";
 import { QueryKey, REP_UNIT_REPETITIONS, WEIGHT_UNIT_KG } from "@/core/lib/consts";
 import { makeHeader, makeLink, makeUrl, WgerLink } from "@/core/lib/url";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,7 +29,7 @@ const parseLocalDateTime = (value: string) => { const [date, time] = value.split
 
 export const SessionTimer = ({ session, onSaved }: { session: WorkoutSession, onSaved: () => Promise<unknown> }) => {
     const stored = localStorage.getItem(TIMER_KEY(session.id!));
-    const validStored = stored !== null && session.datetimeEnd === null && Number(stored) === session.datetimeStart.getTime();
+    const validStored = stored !== null && session.datetimeEnd === null && !session.timeUnknown && Number(stored) === session.datetimeStart.getTime();
     const [started, setStarted] = useState<number | null>(validStored ? Number(stored) : null);
     const [now, setNow] = useState(Date.now());
     useEffect(() => {
@@ -43,7 +43,7 @@ export const SessionTimer = ({ session, onSaved }: { session: WorkoutSession, on
     const elapsed = started === null ? 0 : Math.max(0, Math.floor((now - started) / 1000));
     const clock = [Math.floor(elapsed / 3600), Math.floor(elapsed % 3600 / 60), elapsed % 60].map(value => value.toString().padStart(2, "0")).join(":");
     const startTimer = () => {
-        if (session.datetimeEnd !== null) return;
+        if (session.datetimeEnd !== null || session.timeUnknown) return;
         const timestamp = session.datetimeStart.getTime();
         localStorage.setItem(TIMER_KEY(session.id!), String(timestamp));
         setStarted(timestamp); setNow(Date.now());
@@ -53,7 +53,8 @@ export const SessionTimer = ({ session, onSaved }: { session: WorkoutSession, on
         localStorage.removeItem(TIMER_KEY(session.id!)); setStarted(null);
         if (saved.datetimeEnd !== null) await onSaved();
     };
-    if (session.datetimeEnd !== null) return null;
+    // An imported session with unknown timing is done, never ongoing
+    if (session.datetimeEnd !== null || session.timeUnknown) return null;
     return <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
         <Typography variant="h3" sx={{ textAlign: "center" }}>{clock}</Typography>
         <Button fullWidth size="large" variant="contained" color={started === null ? "primary" : "success"} onClick={started === null ? startTimer : finish}>{started === null ? "Start now" : "Finish workout"}</Button>
@@ -67,10 +68,14 @@ export const SessionMetadataEditor = ({ session, onSaved }: { session: WorkoutSe
     const [end, setEnd] = useState(session.datetimeEnd ? localDateTimeValue(session.datetimeEnd) : "");
     return <Card variant="outlined" sx={{ mb: 2 }}><CardContent><Stack spacing={2}>
         <Typography variant="h6">Session details</Typography>
-        <TextField label="Start" type="datetime-local" value={start} onChange={event => setStart(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-        <TextField label="End" type="datetime-local" value={end} onChange={event => setEnd(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+        {session.timeUnknown
+            ? <Alert severity="info">{TIME_UNKNOWN_LABEL}. This workout was imported without a reliable start or end, so there are no times to show or edit.</Alert>
+            : <>
+                <TextField label="Start" type="datetime-local" value={start} onChange={event => setStart(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+                <TextField label="End" type="datetime-local" value={end} onChange={event => setEnd(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            </>}
         <TextField label="Notes" multiline minRows={3} value={notes} onChange={event => setNotes(event.target.value)} />
-        <Button variant="contained" onClick={async () => { await editSession(WorkoutSession.clone(session, { notes, datetimeStart: parseLocalDateTime(start), datetimeEnd: end ? parseLocalDateTime(end) : null })); await onSaved(); }}>Save session details</Button>
+        <Button variant="contained" onClick={async () => { await editSession(session.timeUnknown ? WorkoutSession.clone(session, { notes }) : WorkoutSession.clone(session, { notes, datetimeStart: parseLocalDateTime(start), datetimeEnd: end ? parseLocalDateTime(end) : null })); await onSaved(); }}>Save session details</Button>
     </Stack></CardContent></Card>;
 };
 export const ExerciseDemoLink = ({ exercise }: { exercise: Exercise }) => {

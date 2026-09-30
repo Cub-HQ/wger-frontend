@@ -375,4 +375,31 @@ describe('SessionForm', () => {
         expect(draft.notes).toBe('Test notes');
         expect(addMutateAsync).not.toHaveBeenCalled();
     });
+
+    test('unknown timing is explained, not shown as times, and kept on a notes edit', async () => {
+        const user = userEvent.setup();
+        const anchor = DateTime.fromISO('2024-05-01T06:00').toJSDate();
+        const imported = new WorkoutSession({
+            id: 'bbbbbbbb-bbbb-bbbb-bbbb-000000000003', dayId, routineId,
+            notes: 'imported', impression: '2', datetimeStart: anchor, datetimeEnd: anchor, timeUnknown: true,
+        });
+        mockUseSessionOfDay.mockImplementation(lookupReturning([imported]));
+
+        renderForm(DateTime.fromISO('2024-05-01'));
+
+        expect(await screen.findByText(/Time\/duration unknown/)).toBeInTheDocument();
+        expect(screen.queryByRole('group', { name: /start/i })).toBeNull();
+        expect(screen.queryByRole('group', { name: /end/i })).toBeNull();
+        expect(editMutateAsync).not.toHaveBeenCalled();
+
+        await user.type(screen.getByRole('textbox', { name: /notes/i }), ' edited');
+        await user.click(screen.getByRole('button', { name: /submit/i }));
+
+        await waitFor(() => expect(editMutateAsync).toHaveBeenCalled());
+        const draft = editMutateAsync.mock.calls[0][0] as WorkoutSession;
+        expect(draft.notes).toBe('imported edited');
+        expect(draft.timeUnknown).toBe(true);
+        expect(draft.datetimeStart).toEqual(anchor);
+        expect(draft.datetimeEnd).toEqual(anchor);
+    });
 });

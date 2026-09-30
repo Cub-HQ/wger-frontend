@@ -23,7 +23,7 @@ import {
 import React from 'react';
 import { useTranslation } from "react-i18next";
 import type { DayProps } from "./CalendarComponent";
-import { SessionSummary, useDeleteSessionQuery, useSessionsQuery, WorkoutSession } from "@/components/Routines";
+import { SessionSummary, TIME_UNKNOWN_LABEL, useDeleteSessionQuery, useSessionsQuery, WorkoutSession } from "@/components/Routines";
 import EditIcon from "@mui/icons-material/Edit";
 import { makeLink, WgerLink } from "@/core/lib/url";
 import { EnduranceItem } from "./EnduranceItem";
@@ -55,7 +55,7 @@ const Entries: React.FC<LogProps> = ({ selectedDay, isStandalone, enduranceError
     const deletion = useDeleteSessionQuery(deleting?.routineId ?? 0);
     // Lock synchronously as well as disabling controls: double clicks can precede a render
     const inFlight = React.useRef(false);
-    const sessionLabel = (session: WorkoutSession) => `${session.dayObj?.name || 'Workout'} — ${dateTimeToLocale(session.datetimeStart)}`;
+    const sessionLabel = (session: WorkoutSession) => `${session.dayObj?.name || 'Workout'} — ${session.timeUnknown ? `${dateToLocale(session.datetimeStart)}, ${TIME_UNKNOWN_LABEL}` : dateTimeToLocale(session.datetimeStart)}`;
     const closeDelete = () => {
         if (!inFlight.current) {
             setDeleting(null);

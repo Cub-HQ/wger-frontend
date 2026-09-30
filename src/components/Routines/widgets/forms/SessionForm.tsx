@@ -3,6 +3,7 @@ import {
     IMPRESSION_GOOD,
     IMPRESSION_NEUTRAL,
     NOTES_MAX_LENGTH,
+    TIME_UNKNOWN_LABEL,
     WorkoutSession
 } from "@/components/Routines/models/WorkoutSession";
 import { useAddSessionQuery, useEditSessionQuery, useSessionOfDay } from "@/components/Routines/queries";
@@ -10,6 +11,7 @@ import { WgerTextField } from "@/core/forms/WgerTextField";
 import { FormQueryErrors } from "@/core/ui/Widgets/FormError";
 import { Add, SentimentNeutral, SentimentSatisfiedAlt, SentimentVeryDissatisfied } from "@mui/icons-material";
 import {
+    Alert,
     Button,
     ButtonGroup,
     List,
@@ -112,15 +114,18 @@ export const SessionForm = (
                     end = end.plus({ days: 1 });
                 }
 
-                const draft = new WorkoutSession({
-                    id: session?.id ?? null,
-                    dayId: dayId,
-                    routineId: routineId,
-                    notes: values.notes,
-                    impression: values.impression,
-                    datetimeStart: start.toJSDate(),
-                    datetimeEnd: end !== null ? end.toJSDate() : null,
-                });
+                // Unknown timing stays unknown, its date anchors are kept as they are
+                const draft = session?.timeUnknown
+                    ? WorkoutSession.clone(session, { notes: values.notes, impression: values.impression })
+                    : new WorkoutSession({
+                        id: session?.id ?? null,
+                        dayId: dayId,
+                        routineId: routineId,
+                        notes: values.notes,
+                        impression: values.impression,
+                        datetimeStart: start.toJSDate(),
+                        datetimeEnd: end !== null ? end.toJSDate() : null,
+                    });
 
                 if (session !== undefined) {
                     await editSessionQuery.mutateAsync(draft);
@@ -187,6 +192,11 @@ export const SessionForm = (
                                 </ListItem>
                             </List>
                         </Grid> : <>
+                            {session?.timeUnknown ? <Grid size={{ xs: 12, sm: 6 }}>
+                                <Alert severity="info">
+                                    {TIME_UNKNOWN_LABEL}. This workout was imported without a reliable start or end, so there are no times to show or edit. Notes, impression and sets can still be changed.
+                                </Alert>
+                            </Grid> : <>
                             <Grid size={{ xs: 6, sm: 3 }}>
                                 <LocalizationProvider dateAdapter={AdapterLuxon} adapterLocale="en-AU">
                                     <TimePicker
@@ -229,6 +239,7 @@ export const SessionForm = (
                                     />
                                 </LocalizationProvider>
                             </Grid>
+                            </>}
                             <Grid size={12}>
                                 <WgerTextField
                                     fieldName="notes"

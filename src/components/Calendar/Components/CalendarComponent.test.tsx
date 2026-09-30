@@ -338,6 +338,28 @@ describe('CalendarComponent', () => {
                 expect(action.compareDocumentPosition(benchCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
             }
         });
+
+        test('unknown timing reads as the date with no time and its sets stay visible', async () => {
+            // Synthetic import: the 06:00 anchor with a zero-length end is storage, not a measurement
+            const anchor = new Date(currentYear, currentMonth, 10, 6);
+            const imported = WorkoutSession.clone(testWorkoutSession, { id: 'imported', datetimeStart: anchor, datetimeEnd: anchor, timeUnknown: true });
+            imported.logs = [set('imported', bench, 1, 6, 50)];
+            (getSessions as Mock).mockImplementation(() => Promise.resolve([imported]));
+            (getRoutine as Mock).mockResolvedValue({ getSetConfigData: () => null } as unknown as Routine);
+
+            renderComponent();
+            await user.click(await screen.findByTestId(`day-${dateToYYYYMMDD(anchor)}`));
+
+            const summary = await screen.findByText(/Time\/duration unknown/);
+            expect(summary.textContent).not.toMatch(/\d{1,2}:\d{2}/);
+            await user.click(screen.getByText('routines.workoutSession'));
+            const benchCard = await screen.findByRole('region', { name: 'Benchpress' });
+            expect(within(benchCard).getAllByRole('listitem').map(row => row.textContent)).toEqual(['Set 16 reps × 50 kg']);
+
+            await user.click(screen.getByRole('button', { name: 'Delete workout' }));
+            const dialog = await screen.findByRole('dialog', { name: 'Delete workout?' });
+            expect(within(dialog).getByText(/Time\/duration unknown/).textContent).not.toMatch(/\d{1,2}:\d{2}/);
+        });
     });
 
     describe('deleting a logged workout', () => {
