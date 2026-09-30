@@ -10,6 +10,7 @@ import {
     RoutineDetailsTable,
     RoutineEdit,
     RoutineOverview,
+    RoutinePreview,
     SessionAdd,
     SlotProgressionEdit,
     TemplateDetail,
@@ -55,6 +56,7 @@ export const WgerRoutes = () => {
                     <Route path="quick" element={<QuickWorkout />} />
                     <Route path="session/:sessionId" element={<SessionDetail />} />
                     <Route path="add" element={<RoutineAdd />} />
+                    <Route path="preview/:previewId" element={<RoutinePreview />} />
 
                     <Route path=":routineId">
                         <Route path="day/:dayId">
